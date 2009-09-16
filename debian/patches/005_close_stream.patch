@@ -1,0 +1,36 @@
+From cadf7874399acef1e28537ab3b04af14f7942988 Mon Sep 17 00:00:00 2001
+From: Johan Hedberg <johan.hedberg@nokia.com>
+Date: Tue, 15 Sep 2009 11:05:49 +0300
+Subject: [PATCH] Fix stream handling when the media transport disconnects prematurely
+
+We might not have a stream anymore when receiving the reply to a AVDTP
+command that assumes that there is an existing stream. So ignore the
+replies to these commands if we don't have a stream anymore.
+---
+ audio/avdtp.c |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+
+diff --git a/audio/avdtp.c b/audio/avdtp.c
+index 2a27ac8..efc001d 100644
+--- a/audio/avdtp.c
++++ b/audio/avdtp.c
+@@ -2580,6 +2580,16 @@ static gboolean avdtp_parse_resp(struct avdtp *session,
+ 		if (!(next && next->signal_id == AVDTP_GET_CAPABILITIES))
+ 			finalize_discovery(session, 0);
+ 		return TRUE;
++	}
++
++	/* The remaining commands require an existing stream so bail out
++	 * here if the stream got unexpectedly disconnected */
++	if (!stream) {
++		debug("AVDTP: stream was closed while waiting for reply");
++		return TRUE;
++	}
++
++	switch (signal_id) {
+ 	case AVDTP_SET_CONFIGURATION:
+ 		debug("SET_CONFIGURATION request succeeded");
+ 		return avdtp_set_configuration_resp(session, stream,
+-- 
+1.6.0.4
+
