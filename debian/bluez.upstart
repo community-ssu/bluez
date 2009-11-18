@@ -19,7 +19,7 @@ pre-start script
 		exit 0;
 	fi
 
-	FULL_NAME=`$OSSO_PRODUCT_INFO -q OSSO_PRODUCT_FULL_NAME`
+	FULL_NAME=`$OSSO_PRODUCT_INFO -q OSSO_PRODUCT_FULL_NAME` || true
 
 	if [ ! -z "$FULL_NAME" ]; then
 		sed -i -e "s/^Name =.*/Name = $FULL_NAME/" $BT_CONF

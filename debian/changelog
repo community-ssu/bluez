@@ -1,9 +1,58 @@
-bluez (4.53-0maemo4+0m5) unstable; urgency=low
+bluez (4.56-0maemo2+0m5) unstable; urgency=low
 
   * This entry has been added by BIFH queue processor
     Suffix +0m5 added to package revision
 
- -- Mika Linnanoja <mika.linnanoja@nokia.com>  Wed, 16 Sep 2009 03:26:59 +0300
+ -- Antti Julku <ext-antti.julku@nokia.com>  Wed, 18 Nov 2009 03:21:57 +0200
+
+bluez (4.56-0maemo2) unstable; urgency=low
+
+  * Fixes: NB#145531 - Cannot reconnect to MD-7W BT speakers
+
+ -- Johan Hedberg <mika.linnanoja@nokia.com>  Mon, 16 Nov 2009 13:28:38 +0200
+
+bluez (4.56-0maemo1) unstable; urgency=low
+
+  * New upstream release
+  * Changes from ChangeLog since 4.55:
+     - Add missing values from Bluetooth 3.0 specification.
+     - Add proper tracking of device paired status.
+     - Fix tracking of devices without permanently stored link key.
+     - Fix issue with link key removal after connection failures.
+     - Fix legacy pairing information based on remote host features.
+     - Fix off-by-one issue with AVDTP capability parsing.
+     - Fix AVRCP, AVCTP, AVDTP, A2DP and HFP version numbers.
+     - Fix agent canceling before calling agent_destroy.
+     - Fix service record parsing with an empty UUID list.
+     - Fix various SDP related memory leaks.
+  * Fixes: NB#142338 - Bluetooth crash during pairing
+  * Fixes: NB#142447 - Audio profile versions in SDP records are wrong
+
+ -- Johan Hedberg <johan.hedberg@nokia.com>  Sat, 10 Oct 2009 16:38:56 +0300
+
+bluez (4.55-0maemo1) unstable; urgency=low
+
+  * New upstream release
+  * Changes from ChangeLog since 4.53:
+     - Add support for POSIX capabilities dropping.
+     - Add special quirk for the Nokia CK-20W car kit.
+     - Fix error code handling for AVDTP SetConfiguration response.
+     - Fix updating out of range list when RSSI hasn't changed.
+     - Fix various memory leaks and unnecessary error checks.
+     - Add introspection interface to output of introspection calls.
+     - Fix stream handling when media transport disconnects prematurely.
+     - Fix command timeout handling when there's no stream.
+     - Fix headset_suspend_stream behavior for invalid states
+     - Fix issue with AVDTP ABORTING state transition.
+     - Fix issue with AVDTP suspend while closing.
+  * Fixes: NB#135934 - Media Player becomes unstable when using CK-20W to skip
+    to the next track
+  * Fixes: NB#137219 - Crash "bluetooththed-8A09-11-908" is displayed.
+  * Fixes: NB#140019 - Routing is delayed when disconnecting Jabra stereo BT
+    headset while in call
+  * Fixes: NB#139861 - bluetoothd startup script does not work on Harmattan 
+
+ -- Johan Hedberg <johan.hedberg@nokia.com>  Sun,  4 Oct 2009 14:26:24 +0300
 
 bluez (4.53-0maemo4) unstable; urgency=low
 
