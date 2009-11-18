@@ -53,7 +53,7 @@ lib_LTLIBRARIES += lib/libbluetooth.la
 
 lib_libbluetooth_la_SOURCES = $(lib_headers) \
 					lib/bluetooth.c lib/hci.c lib/sdp.c
-lib_libbluetooth_la_LDFLAGS = -version-info 7:0:4
+lib_libbluetooth_la_LDFLAGS = -version-info 7:2:4
 lib_libbluetooth_la_DEPENDENCIES = $(local_headers)
 
 CLEANFILES += $(local_headers)
@@ -191,10 +191,11 @@ src_bluetoothd_SOURCES = $(gdbus_sources) $(builtin_sources) \
 			src/device.h src/device.c \
 			src/dbus-common.c src/dbus-common.h \
 			src/dbus-hci.h src/dbus-hci.c
-src_bluetoothd_LDADD = lib/libbluetooth.la @GLIB_LIBS@ @DBUS_LIBS@ -ldl
+src_bluetoothd_LDADD = lib/libbluetooth.la @GLIB_LIBS@ @DBUS_LIBS@ \
+							@CAPNG_LIBS@ -ldl
 src_bluetoothd_LDFLAGS = -Wl,--export-dynamic \
 					-Wl,--version-script=src/bluetooth.ver
-src_bluetoothd_DEPENDENCIES = src/bluetooth.ver
+src_bluetoothd_DEPENDENCIES = src/bluetooth.ver lib/libbluetooth.la
 
 builtin_files = src/builtin.h $(builtin_nodist)
 
@@ -304,7 +305,7 @@ EXTRA_DIST += doc/manager-api.txt \
 
 AM_YFLAGS = -d
 
-AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ \
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @CAPNG_CFLAGS@ \
 		-DBLUETOOTH_PLUGIN_BUILTIN -DPLUGINDIR=\""$(plugindir)"\"
 
 INCLUDES = -I$(builddir)/lib -I$(builddir)/src -I$(srcdir)/src \

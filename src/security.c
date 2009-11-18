@@ -413,6 +413,8 @@ static void return_link_keys(int dev, bdaddr_t *sba, void *ptr)
 
 		info("return_link_keys (sba=%s, dba=%s)", sa, da);
 
+		hcid_dbus_returned_link_key(sba, &dba);
+
 		ptr += 22;
 	}
 }
@@ -649,6 +651,16 @@ static void inquiry_complete(bdaddr_t *local, uint8_t status, gboolean periodic)
 	state &= ~STD_INQUIRY;
 	state &= ~PERIODIC_INQUIRY;
 	adapter_set_state(adapter, state);
+}
+
+static inline void remote_features_notify(int dev, bdaddr_t *sba, void *ptr)
+{
+	evt_remote_host_features_notify *evt = ptr;
+
+	if (evt->features[0] & 0x01)
+		hcid_dbus_set_legacy_pairing(sba, &evt->bdaddr, FALSE);
+	else
+		hcid_dbus_set_legacy_pairing(sba, &evt->bdaddr, TRUE);
 }
 
 static inline void cmd_status(int dev, bdaddr_t *sba, void *ptr)
@@ -983,6 +995,10 @@ static gboolean io_security_event(GIOChannel *chan, GIOCondition cond, gpointer 
 
 	case EVT_READ_REMOTE_FEATURES_COMPLETE:
 		remote_features_information(dev, &di->bdaddr, ptr);
+		break;
+
+	case EVT_REMOTE_HOST_FEATURES_NOTIFY:
+		remote_features_notify(dev, &di->bdaddr, ptr);
 		break;
 
 	case EVT_INQUIRY_COMPLETE:

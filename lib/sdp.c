@@ -2026,7 +2026,7 @@ int sdp_get_lang_attr(const sdp_record_t *rec, sdp_list_t **langSeq)
 		sdp_data_t *pCode = curr_data;
 		sdp_data_t *pEncoding = pCode->next;
 		sdp_data_t *pOffset = pEncoding->next;
-		if (pCode && pEncoding && pOffset) {
+		if (pEncoding && pOffset) {
 			lang = malloc(sizeof(sdp_lang_attr_t));
 			lang->code_ISO639 = pCode->val.uint16;
 			lang->encoding = pEncoding->val.uint16;
@@ -3469,13 +3469,14 @@ sdp_record_t *sdp_service_attr_req(sdp_session_t *session, uint32_t handle,
 		return 0;
 	}
 
+	memset(&rsp_concat_buf, 0, sizeof(sdp_buf_t));
+
 	reqbuf = malloc(SDP_REQ_BUFFER_SIZE);
 	rspbuf = malloc(SDP_RSP_BUFFER_SIZE);
 	if (!reqbuf || !rspbuf) {
 		errno = ENOMEM;
 		goto end;
 	}
-	memset((char *) &rsp_concat_buf, 0, sizeof(sdp_buf_t));
 	reqhdr = (sdp_pdu_hdr_t *) reqbuf;
 	reqhdr->pdu_id = SDP_SVC_ATTR_REQ;
 
@@ -4288,6 +4289,9 @@ int sdp_service_search_attr_req(sdp_session_t *session, const sdp_list_t *search
 		errno = EINVAL;
 		return -1;
 	}
+
+	memset(&rsp_concat_buf, 0, sizeof(sdp_buf_t));
+
 	reqbuf = malloc(SDP_REQ_BUFFER_SIZE);
 	rspbuf = malloc(SDP_RSP_BUFFER_SIZE);
 	if (!reqbuf || !rspbuf) {
@@ -4296,7 +4300,6 @@ int sdp_service_search_attr_req(sdp_session_t *session, const sdp_list_t *search
 		goto end;
 	}
 
-	memset((char *)&rsp_concat_buf, 0, sizeof(sdp_buf_t));
 	reqhdr = (sdp_pdu_hdr_t *) reqbuf;
 	reqhdr->pdu_id = SDP_SVC_SEARCH_ATTR_REQ;
 

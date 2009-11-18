@@ -100,7 +100,7 @@ static GSList *active_devices = NULL;
 
 static char *str_state[] = {
 	"HEADSET_STATE_DISCONNECTED",
-	"HEADSET_STATE_CONNECT_IN_PROGRESS",
+	"HEADSET_STATE_CONNECTING",
 	"HEADSET_STATE_CONNECTED",
 	"HEADSET_STATE_PLAY_IN_PROGRESS",
 	"HEADSET_STATE_PLAYING",
@@ -2347,6 +2347,10 @@ unsigned int headset_suspend_stream(struct audio_device *dev,
 {
 	struct headset *hs = dev->headset;
 	unsigned int id;
+
+	if (hs->state == HEADSET_STATE_DISCONNECTED ||
+				hs->state == HEADSET_STATE_CONNECTING)
+		return 0;
 
 	if (hs->dc_timer) {
 		g_source_remove(hs->dc_timer);

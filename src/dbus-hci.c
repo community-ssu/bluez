@@ -549,6 +549,27 @@ void hcid_dbus_inquiry_result(bdaddr_t *local, bdaddr_t *peer, uint32_t class,
 	g_free(alias);
 }
 
+void hcid_dbus_set_legacy_pairing(bdaddr_t *local, bdaddr_t *peer,
+							gboolean legacy)
+{
+	struct btd_adapter *adapter;
+	struct btd_device *device;
+	struct remote_dev_info *dev, match;
+
+	if (!get_adapter_and_device(local, peer, &adapter, &device, FALSE)) {
+		error("No matching adapter found");
+		return;
+	}
+
+	memset(&match, 0, sizeof(struct remote_dev_info));
+	bacpy(&match.bdaddr, peer);
+	match.name_status = NAME_ANY;
+
+	dev = adapter_search_found_devices(adapter, &match);
+	if (dev)
+		dev->legacy = legacy;
+}
+
 void hcid_dbus_remote_class(bdaddr_t *local, bdaddr_t *peer, uint32_t class)
 {
 	uint32_t old_class = 0;
@@ -625,7 +646,7 @@ int hcid_dbus_link_key_notify(bdaddr_t *local, bdaddr_t *peer,
 	struct btd_device *device;
 	struct btd_adapter *adapter;
 	uint8_t local_auth = 0xff, remote_auth, new_key_type;
-	gboolean bonding;
+	gboolean bonding, stored;
 
 	if (!get_adapter_and_device(local, peer, &adapter, &device, TRUE))
 		return -ENODEV;
@@ -665,7 +686,10 @@ int hcid_dbus_link_key_notify(bdaddr_t *local, bdaddr_t *peer,
 			error("write_link_key: %s (%d)", strerror(-err), -err);
 			return err;
 		}
-	}
+
+		stored = TRUE;
+	} else
+		stored = FALSE;
 
 	/* If this is not the first link key set a flag so a subsequent auth
 	 * complete event doesn't trigger SDP */
@@ -676,6 +700,9 @@ int hcid_dbus_link_key_notify(bdaddr_t *local, bdaddr_t *peer,
 		device_set_secmode3_conn(device, TRUE);
 	else if (!bonding && old_key_type == 0xff)
 		hcid_dbus_bonding_process_complete(local, peer, 0);
+
+	if (!stored)
+		device_set_temporary(device, TRUE);
 
 	return 0;
 }
@@ -690,11 +717,15 @@ void hcid_dbus_conn_complete(bdaddr_t *local, uint8_t status, uint16_t handle,
 		return;
 
 	if (status) {
+		gboolean secmode3 = device_get_secmode3_conn(device);
+
 		device_set_secmode3_conn(device, FALSE);
+
 		if (device_is_bonding(device, NULL))
 			device_bonding_complete(device, status);
 		if (device_is_temporary(device))
-			adapter_remove_device(connection, adapter, device);
+			adapter_remove_device(connection, adapter, device,
+								secmode3);
 		return;
 	}
 
@@ -721,7 +752,7 @@ void hcid_dbus_disconn_complete(bdaddr_t *local, uint8_t status,
 
 	device = adapter_find_connection(adapter, handle);
 	if (!device) {
-		error("No matching connection found for handle %u", handle);
+		debug("No matching connection found for handle %u", handle);
 		return;
 	}
 
@@ -815,6 +846,17 @@ void hcid_dbus_write_simple_pairing_mode_complete(bdaddr_t *local)
 	hci_close_dev(dd);
 
 	adapter_update_ssp_mode(adapter, mode);
+}
+
+void hcid_dbus_returned_link_key(bdaddr_t *local, bdaddr_t *peer)
+{
+	struct btd_adapter *adapter;
+	struct btd_device *device;
+
+	if (!get_adapter_and_device(local, peer, &adapter, &device, TRUE))
+		return;
+
+	device_set_paired(device, TRUE);
 }
 
 int hcid_dbus_get_io_cap(bdaddr_t *local, bdaddr_t *remote,
