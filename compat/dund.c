@@ -3,7 +3,7 @@
  *  BlueZ - Bluetooth protocol stack for Linux
  *
  *  Copyright (C) 2002-2003  Maxim Krasnyansky <maxk@qualcomm.com>
- *  Copyright (C) 2002-2009  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2002-2010  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -192,7 +192,7 @@ static int do_listen(void)
 		}
 
 		ba2str(&sa.rc_bdaddr, ba);
-		sprintf(ch, "%d", channel);
+		snprintf(ch, sizeof(ch), "%d", channel);
 
 		/* Setup environment */
 		setenv("DUN_BDADDR",  ba, 1);

@@ -2,8 +2,8 @@
  *
  *  BlueZ - Bluetooth protocol stack for Linux
  *
- *  Copyright (C) 2006-2007  Nokia Corporation
- *  Copyright (C) 2004-2009  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2006-2010  Nokia Corporation
+ *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -223,7 +223,7 @@ static void device_free(gpointer user_data)
 	struct agent *agent = adapter_get_agent(adapter);
 
 	if (device->agent)
-		agent_destroy(device->agent, FALSE);
+		agent_free(device->agent);
 
 	if (agent && (agent_is_busy(agent, device) ||
 				agent_is_busy(agent, device->authr)))
@@ -765,6 +765,11 @@ void device_remove_connection(struct btd_device *device, DBusConnection *conn,
 
 	device->handle = 0;
 
+	if (device->disconn_timer > 0) {
+		g_source_remove(device->disconn_timer);
+		device->disconn_timer = 0;
+	}
+
 	while (device->disconnects) {
 		DBusMessage *msg = device->disconnects->data;
 
@@ -937,10 +942,12 @@ static void device_remove_stored(struct btd_device *device)
 
 	adapter_get_address(device->adapter, &src);
 	ba2str(&device->bdaddr, addr);
+
 	if (device->paired)
 		device_remove_bonding(device);
 	delete_entry(&src, "profiles", addr);
 	delete_entry(&src, "trusts", addr);
+	delete_all_records(&src, &device->bdaddr);
 }
 
 void device_remove(struct btd_device *device, gboolean remove_stored)
@@ -1134,10 +1141,8 @@ static void device_remove_drivers(struct btd_device *device, GSList *uuids)
 		next = list->next;
 
 		for (uuid = driver->uuids; *uuid; uuid++) {
-			sdp_record_t *rec;
-
 			if (!g_slist_find_custom(uuids, *uuid,
-					(GCompareFunc) strcasecmp))
+						(GCompareFunc) strcasecmp))
 				continue;
 
 			debug("UUID %s was removed from device %s",
@@ -1148,24 +1153,28 @@ static void device_remove_drivers(struct btd_device *device, GSList *uuids)
 								driver_data);
 			g_free(driver_data);
 
-			rec = find_record_in_list(records, *uuid);
-			if (!rec)
-				break;
-
-			delete_record(srcaddr, dstaddr, rec->handle);
-
-			records = sdp_list_remove(records, rec);
-			sdp_record_free(rec);
-
 			break;
 		}
 	}
 
+	for (list = uuids; list; list = list->next) {
+		sdp_record_t *rec;
+
+		device->uuids = g_slist_remove(device->uuids, list->data);
+
+		rec = find_record_in_list(records, list->data);
+		if (!rec)
+			continue;
+
+		delete_record(srcaddr, dstaddr, rec->handle);
+
+		records = sdp_list_remove(records, rec);
+		sdp_record_free(rec);
+
+	}
+
 	if (records)
 		sdp_list_free(records, (sdp_free_func_t) sdp_record_free);
-
-	for (list = uuids; list; list = list->next)
-		device->uuids = g_slist_remove(device->uuids, list->data);
 }
 
 static void services_changed(struct btd_device *device)
@@ -1313,16 +1322,16 @@ static void search_cb(sdp_list_t *recs, int err, gpointer user_data)
 
 	update_services(req, recs);
 
-	if (!req->profiles_added && !req->profiles_removed) {
-		debug("%s: No service update", device->path);
-		goto proceed;
-	}
-
 	if (device->tmp_records && req->records) {
 		sdp_list_free(device->tmp_records,
 					(sdp_free_func_t) sdp_record_free);
 		device->tmp_records = req->records;
 		req->records = NULL;
+	}
+
+	if (!req->profiles_added && !req->profiles_removed) {
+		debug("%s: No service update", device->path);
+		goto proceed;
 	}
 
 	/* Probe matching drivers for services added */
@@ -1653,7 +1662,7 @@ static void bonding_request_free(struct bonding_req *bonding)
 		return;
 
 	agent_cancel(device->agent);
-	agent_destroy(device->agent, FALSE);
+	agent_free(device->agent);
 	device->agent = NULL;
 }
 
@@ -2040,12 +2049,13 @@ static void pincode_cb(struct agent *agent, DBusError *err, const char *pincode,
 	struct btd_device *device = auth->device;
 
 	/* No need to reply anything if the authentication already failed */
-	if (!auth->cb)
+	if (!auth || !auth->cb)
 		return;
 
 	((agent_pincode_cb) auth->cb)(agent, err, pincode, device);
 
-	auth->cb = NULL;
+	device->authr->cb = NULL;
+	device->authr->agent = NULL;
 }
 
 static void confirm_cb(struct agent *agent, DBusError *err, void *data)
@@ -2054,12 +2064,13 @@ static void confirm_cb(struct agent *agent, DBusError *err, void *data)
 	struct btd_device *device = auth->device;
 
 	/* No need to reply anything if the authentication already failed */
-	if (!auth->cb)
+	if (!auth || !auth->cb)
 		return;
 
 	((agent_cb) auth->cb)(agent, err, device);
 
-	auth->cb = NULL;
+	device->authr->cb = NULL;
+	device->authr->agent = NULL;
 }
 
 static void passkey_cb(struct agent *agent, DBusError *err, uint32_t passkey,
@@ -2069,12 +2080,13 @@ static void passkey_cb(struct agent *agent, DBusError *err, uint32_t passkey,
 	struct btd_device *device = auth->device;
 
 	/* No need to reply anything if the authentication already failed */
-	if (!auth->cb)
+	if (!auth || !auth->cb)
 		return;
 
 	((agent_passkey_cb) auth->cb)(agent, err, passkey, device);
 
-	auth->cb = NULL;
+	device->authr->cb = NULL;
+	device->authr->agent = NULL;
 }
 
 int device_request_authentication(struct btd_device *device, auth_type_t type,
@@ -2141,7 +2153,7 @@ static void cancel_authentication(struct authentication_req *auth)
 	struct agent *agent = auth->agent;
 	DBusError err;
 
-	if (!auth->cb)
+	if (!auth || !auth->cb)
 		return;
 
 	dbus_error_init(&err);

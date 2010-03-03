@@ -2,8 +2,8 @@
  *
  *  BlueZ - Bluetooth protocol stack for Linux
  *
- *  Copyright (C) 2006-2007  Nokia Corporation
- *  Copyright (C) 2004-2009  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2006-2010  Nokia Corporation
+ *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -451,7 +451,7 @@ int manager_unregister_adapter(int id)
 
 int manager_start_adapter(int id)
 {
-	struct btd_adapter* adapter;
+	struct btd_adapter *adapter;
 	int ret;
 
 	adapter = manager_find_adapter_by_id(id);

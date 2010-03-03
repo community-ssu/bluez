@@ -2,7 +2,7 @@
  *
  *  BlueZ - Bluetooth protocol stack for Linux
  *
- *  Copyright (C) 2004-2009  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This library is free software; you can redistribute it and/or
@@ -1089,6 +1089,7 @@ static gboolean gst_avdtp_sink_configure(GstAvdtpSink *self,
 	req->h.type = BT_REQUEST;
 	req->h.name = BT_SET_CONFIGURATION;
 	req->h.length = sizeof(*req);
+	memcpy(&req->codec, codec, sizeof(req->codec));
 
 	if (codec->type == BT_A2DP_SBC_SINK)
 		ret = gst_avdtp_sink_init_sbc_pkt_conf(self, caps,
