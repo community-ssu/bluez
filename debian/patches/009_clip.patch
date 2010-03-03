@@ -1,0 +1,12 @@
+diff --git a/audio/headset.c b/audio/headset.c
+index 7002a3a..c7709cb 100644
+--- a/audio/headset.c
++++ b/audio/headset.c
+@@ -2481,6 +2481,7 @@ void headset_set_state(struct audio_device *dev, headset_state_t state)
+ 					AUDIO_HEADSET_INTERFACE, "Connected",
+ 					DBUS_TYPE_BOOLEAN, &value);
+ 			telephony_device_disconnected(dev);
++			hs->cli_active = FALSE;
+ 		}
+ 		active_devices = g_slist_remove(active_devices, dev);
+ 		device_remove_disconnect_watch(dev->btd_dev, hs->dc_id);

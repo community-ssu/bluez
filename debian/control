@@ -30,6 +30,14 @@ Conflicts: bluez-utils-test
 Description: testing tools for bluez
  This package contains several test tools for testing the BlueZ stack
 
+Package: bluez-doc
+Section: doc
+Architecture: any
+Priority: extra
+Depends: bluez (= ${binary:Version})
+Description: Documentation for BlueZ
+ This package contains the API documentation that comes with BlueZ.
+
 Package: bluez-dbg
 Section: libdevel
 Architecture: any

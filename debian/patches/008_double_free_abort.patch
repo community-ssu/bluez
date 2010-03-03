@@ -1,0 +1,28 @@
+commit c63916361cbba1765eea63cac13b846c9e5af913
+Author: Daniel Orstadius <daniel.orstadius@gmail.com>
+Date:   Sun Feb 21 14:39:49 2010 +0200
+
+    Fix double free on AVDTP Abort response
+    
+    The pending request might be freed twice when receiving an Abort
+    response, in handle_unanswered_req and session_cb. Avoid freeing
+    it in handle_unanswered_req.
+
+diff --git a/audio/avdtp.c b/audio/avdtp.c
+index 2591845..add08f1 100644
+--- a/audio/avdtp.c
++++ b/audio/avdtp.c
+@@ -905,6 +905,13 @@ static void handle_unanswered_req(struct avdtp *session,
+ 	struct avdtp_local_sep *lsep;
+ 	struct avdtp_error err;
+ 
++	if (session->req->signal_id == AVDTP_ABORT) {
++		/* Avoid freeing the Abort request here */
++		debug("handle_unanswered_req: Abort req, returning");
++		session->req->stream = NULL;
++		return;
++	}
++
+ 	req = session->req;
+ 	session->req = NULL;
+ 

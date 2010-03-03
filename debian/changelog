@@ -1,15 +1,87 @@
-bluez (4.56-0maemo2+0m5) unstable; urgency=low
+bluez (4.60-0maemo1.4+0m5) unstable; urgency=low
 
   * This entry has been added by BIFH queue processor
-    Suffix +0m5 added to package revision
+    version has been changed to 4.60-0maemo1.4+0m5
 
- -- Antti Julku <ext-antti.julku@nokia.com>  Wed, 18 Nov 2009 03:21:57 +0200
+ -- Antti Julku <ext-antti.julku@nokia.com>  Wed, 03 Mar 2010 08:56:56 +0200
 
-bluez (4.56-0maemo2) unstable; urgency=low
+bluez (4.60-0maemo1.4) unstable; urgency=low
 
-  * Fixes: NB#145531 - Cannot reconnect to MD-7W BT speakers
+  * Reset CLIP flag on disconnect
+  * Fixes: NB#158874 - CLIP received from AG when calling line identification
+    disabled (PTS TC_AG_ICA_BV_07_I)
 
- -- Johan Hedberg <mika.linnanoja@nokia.com>  Mon, 16 Nov 2009 13:28:38 +0200
+ -- Daniel Orstadius <ext-daniel.orstadius@nokia.com>  Tue,  2 Mar 2010 17:16:35 +0200
+
+bluez (4.60-0maemo1.3) unstable; urgency=low
+
+  * Backport patch for avoiding double free
+  * Fixes: NB#157657 - Response from remote to AVDTP ABORT might crash bluetoothd
+
+ -- Daniel Orstadius <ext-daniel.orstadius@nokia.com>  Mon, 22 Feb 2010 09:45:27 +0200
+
+bluez (4.60-0maemo1.2) unstable; urgency=low
+
+  * Fixes: NB#154919 - Device hangs after it fails to connect to carkit
+  * Fixes: NB#122700 - Enable doc generation in bluez code
+
+ -- Daniel Orstadius <ext-daniel.orstadius@nokia.com>  Wed, 10 Feb 2010 14:53:36 +0200
+
+bluez (4.60-0maemo1.1) unstable; urgency=low
+
+  * Backport patch for conference call handling with AT+CHUP
+  * Fixes: NB#143628 - Not able to End the conference call from BT HS
+
+ -- Daniel Orstadius <ext-daniel.orstadius@nokia.com>  Thu,  4 Feb 2010 09:32:19 +0200
+
+bluez (4.60-0maemo1) unstable; urgency=low
+
+  * New upstream release
+  * Changes from ChangeLog since 4.58:
+     - Fix voice mailbox number reading from SIM.
+     - Fix some races with D-Bus mainloop integration.
+     - Add helpers for D-Bus signal watches.
+     - Add values for Bluetooth 4.0 specification.
+     - Add SDP functions for HDP support.
+     - Add test scripts for input and audio.
+     - Fix missing close on BtIO create_io function.
+     - Fix sending incorrect AVDTP commands after timeout occurs.
+     - Fix timer removal when device disconnects unexpectedly.
+     - Fix Extended Inquiry Response record for Device ID.
+  * Fixes: NB#152220 - Unable to call to voice mailbox from BT headset when
+    voice mailbox number is saved to the SIM card
+
+ -- Johan Hedberg <johan.hedberg@nokia.com>  Tue, 29 Dec 2009 09:35:58 +0200
+
+bluez (4.58-0maemo2) unstable; urgency=low
+
+  * Add missing AVDTP accept delay patch
+  * Fixes: NB#147580 - Cannot reconnect to MD-7W BT speakers
+
+ -- Johan Hedberg <johan.hedberg@nokia.com>  Tue, 24 Nov 2009 13:04:27 +0200
+
+bluez (4.58-0maemo1) unstable; urgency=low
+
+  * New upstream release
+  * Changes from ChangeLog since 4.56:
+     - Fix crash when adapter agent exists during authentication.
+     - Fix CK-20W quirks for play and pause events.
+     - Fix unloading of drivers for uninitialized adapters.
+     - Fix debug message to use requested and not opened SEID.
+     - Fix codec selection for GStreamer plugin.
+     - Fix deleting of SDP records during service updates.
+     - Fix deleting of SDP records when a device is removed.
+     - Fix handling when the SDP record is modified on remote device.
+     - Fix potential buffer overflow by using snprintf instead of sprintf.
+     - Fix const declarations for some storage function parameters.
+  * Fixes: NB#144104 - Play/Pause can not be triggerred from CK-20W sometimes.
+  * Fixes: NB#147580 - Cannot reconnect to MD-7W BT speakers
+  * Fixes: NB#147426 - No audio on headset when making phone call, bluetoothd
+    crash
+  * Fixes: NB#146015 - Bluetooth daemon died after UI restart and failed
+    pairing with PC Suite
+
+ -- Johan Hedberg <johan.hedberg@nokia.com>  Mon, 23 Nov 2009 09:49:57 +0200
 
 bluez (4.56-0maemo1) unstable; urgency=low
 
