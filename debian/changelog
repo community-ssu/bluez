@@ -1,9 +1,15 @@
-bluez (4.60-0maemo1.5+0m5) unstable; urgency=low
+bluez (4.60-0maemo1.6+0m5) unstable; urgency=low
 
   * This entry has been added by BIFH queue processor
-    version has been changed to 4.60-0maemo1.5+0m5
+    version has been changed to 4.60-0maemo1.6+0m5
 
- -- Antti Julku <ext-antti.julku@nokia.com>  Wed, 17 Mar 2010 09:34:53 +0200
+ -- Antti Julku <ext-antti.julku@nokia.com>  Tue, 15 Jun 2010 02:01:05 +0300
+
+bluez (4.60-0maemo1.6) unstable; urgency=low
+
+  * Fixes: NB#173601 - Security vulnerability in bluetooth-dun package (from extras)
+
+ -- Daniel Orstadius <ext-daniel.orstadius@nokia.com>  Thu, 10 Jun 2010 13:13:32 +0300
 
 bluez (4.60-0maemo1.5) unstable; urgency=low
 
