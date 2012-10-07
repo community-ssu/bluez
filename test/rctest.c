@@ -85,6 +85,7 @@ static int socktype = SOCK_STREAM;
 static int linger = 0;
 static int timestamp = 0;
 static int defer_setup = 0;
+static int priority = -1;
 
 static float tv2fl(struct timeval tv)
 {
@@ -232,9 +233,22 @@ static int do_connect(const char *svr)
 		//goto error;
 	}
 
-	syslog(LOG_INFO, "Connected [handle %d, class 0x%02x%02x%02x]",
-		conn.hci_handle,
-		conn.dev_class[2], conn.dev_class[1], conn.dev_class[0]);
+	if (priority > 0 && setsockopt(sk, SOL_SOCKET, SO_PRIORITY, &priority,
+						sizeof(priority)) < 0) {
+		syslog(LOG_ERR, "Can't set socket priority: %s (%d)",
+							strerror(errno), errno);
+		goto error;
+	}
+
+	if (getsockopt(sk, SOL_SOCKET, SO_PRIORITY, &opt, &optlen) < 0) {
+		syslog(LOG_ERR, "Can't get socket priority: %s (%d)",
+							strerror(errno), errno);
+		goto error;
+	}
+
+	syslog(LOG_INFO, "Connected [handle %d, class 0x%02x%02x%02x, "
+			"priority %d]", conn.hci_handle, conn.dev_class[2],
+			conn.dev_class[1], conn.dev_class[0], opt);
 
 	return sk;
 
@@ -348,10 +362,26 @@ static void do_listen(void (*handler)(int sk))
 			//goto error;
 		}
 
+		if (priority > 0 && setsockopt(sk, SOL_SOCKET, SO_PRIORITY,
+					&priority, sizeof(priority)) < 0) {
+			syslog(LOG_ERR, "Can't set socket priority: %s (%d)",
+						strerror(errno), errno);
+			close(nsk);
+			goto error;
+		}
+
+		optlen = sizeof(priority);
+		if (getsockopt(nsk, SOL_SOCKET, SO_PRIORITY, &opt, &optlen) < 0) {
+			syslog(LOG_ERR, "Can't get socket priority: %s (%d)",
+							strerror(errno), errno);
+			goto error;
+		}
+
 		ba2str(&addr.rc_bdaddr, ba);
-		syslog(LOG_INFO, "Connect from %s [handle %d, class 0x%02x%02x%02x]",
-			ba, conn.hci_handle,
-			conn.dev_class[2], conn.dev_class[1], conn.dev_class[0]);
+		syslog(LOG_INFO, "Connect from %s [handle %d, "
+				"class 0x%02x%02x%02x, priority %d]",
+				ba, conn.hci_handle, conn.dev_class[2],
+				conn.dev_class[1], conn.dev_class[0], opt);
 
 #if 0
 		/* Enable SO_TIMESTAMP */
@@ -417,13 +447,11 @@ static void recv_mode(int sk)
 	struct timeval tv_beg, tv_end, tv_diff;
 	char ts[30];
 	long total;
-	uint32_t seq;
 
 	syslog(LOG_INFO, "Receiving ...");
 
 	memset(ts, 0, sizeof(ts));
 
-	seq = 0;
 	while (1) {
 		gettimeofday(&tv_beg,NULL);
 		total = 0;
@@ -436,7 +464,7 @@ static void recv_mode(int sk)
 				if (r < 0)
 					syslog(LOG_ERR, "Read failed: %s (%d)",
 							strerror(errno), errno);
-				return;	
+				return;
 			}
 
 			if (timestamp) {
@@ -459,15 +487,15 @@ static void recv_mode(int sk)
 				seq = sq;
 			}
 			seq++;
-			
+
 			/* Check length */
 			l = btohs(*(uint16_t *) (buf + 4));
 			if (r != l) {
 				syslog(LOG_INFO, "size missmatch: %d -> %d", r, l);
 				continue;
 			}
-			
-			/* Verify data */	
+
+			/* Verify data */
 			for (i = 6; i < r; i++) {
 				if (buf[i] != 0x7f)
 					syslog(LOG_INFO, "data missmatch: byte %d 0x%2.2x", i, buf[i]);
@@ -511,7 +539,7 @@ static void do_send(int sk)
 		*(uint32_t *) buf = htobl(seq);
 		*(uint16_t *) (buf + 4) = htobs(data_size);
 		seq++;
-		
+
 		if (send(sk, buf, data_size, 0) <= 0) {
 			syslog(LOG_ERR, "Send failed: %s (%d)",
 							strerror(errno), errno);
@@ -586,6 +614,7 @@ static void usage(void)
 		"\t[-N num] number of frames to send\n"
 		"\t[-C num] send num frames before delay (default = 1)\n"
 		"\t[-D milliseconds] delay after sending num frames (default = 0)\n"
+		"\t[-Y priority] socket priority\n"
 		"\t[-A] request authentication\n"
 		"\t[-E] request encryption\n"
 		"\t[-S] secure connection\n"
@@ -600,7 +629,7 @@ int main(int argc, char *argv[])
 
 	bacpy(&bdaddr, BDADDR_ANY);
 
-	while ((opt=getopt(argc,argv,"rdscuwmnb:i:P:U:B:N:MAESL:W:C:D:T")) != EOF) {
+	while ((opt=getopt(argc,argv,"rdscuwmnb:i:P:U:B:N:MAESL:W:C:D:Y:T")) != EOF) {
 		switch (opt) {
 		case 'r':
 			mode = RECV;
@@ -701,6 +730,10 @@ int main(int argc, char *argv[])
 
 		case 'D':
 			delay = atoi(optarg) * 1000;
+			break;
+
+		case 'Y':
+			priority = atoi(optarg);
 			break;
 
 		case 'T':

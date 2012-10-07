@@ -34,7 +34,6 @@
 #include <sys/ioctl.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/l2cap.h>
 #include <bluetooth/bnep.h>
 
 #include <netinet/in.h>
@@ -93,7 +92,7 @@ int bnep_init(void)
 	}
 
 	/* Temporary ioctl compatibility hack */
-	{ 
+	{
 		struct bnep_connlist_req req;
 		struct bnep_conninfo ci[1];
 
@@ -138,9 +137,10 @@ int bnep_show_connections(void)
 	}
 
 	for (i = 0; i < req.cnum; i++) {
+		char addr[18];
+		ba2str((bdaddr_t *) ci[i].dst, addr);
 		printf("%s %s %s\n", ci[i].device,
-			batostr((bdaddr_t *) ci[i].dst),
-			bnep_svc2str(ci[i].role));
+			addr, bnep_svc2str(ci[i].role));
 	}
 	return 0;
 }
@@ -194,19 +194,19 @@ static int bnep_connadd(int sk, uint16_t role, char *dev)
 	return 0;
 }
 
-struct __service_16 { 
+struct __service_16 {
 	uint16_t dst;
 	uint16_t src;
 } __attribute__ ((packed));
 
-struct __service_32 { 
+struct __service_32 {
 	uint16_t unused1;
 	uint16_t dst;
 	uint16_t unused2;
 	uint16_t src;
 } __attribute__ ((packed));
 
-struct __service_128 { 
+struct __service_128 {
 	uint16_t unused1;
 	uint16_t dst;
 	uint16_t unused2[8];
@@ -231,6 +231,22 @@ int bnep_accept_connection(int sk, uint16_t role, char *dev)
 		return -1;
 
 	req = (void *) pkt;
+
+	/* Highest known Control command ID
+	 * is BNEP_FILTER_MULT_ADDR_RSP = 0x06 */
+	if (req->type == BNEP_CONTROL &&
+				req->ctrl > BNEP_FILTER_MULT_ADDR_RSP) {
+		uint8_t pkt[3];
+
+		pkt[0] = BNEP_CONTROL;
+		pkt[1] = BNEP_CMD_NOT_UNDERSTOOD;
+		pkt[2] = req->ctrl;
+
+		send(sk, pkt, sizeof(pkt), 0);
+
+		return -1;
+	}
+
 	if (req->type != BNEP_CONTROL || req->ctrl != BNEP_SETUP_CONN_REQ)
 		return -1;
 
@@ -246,7 +262,7 @@ int bnep_accept_connection(int sk, uint16_t role, char *dev)
 	return bnep_connadd(sk, role, dev);
 }
 
-/* Create BNEP connection 
+/* Create BNEP connection
  * sk      - Connect L2CAP socket
  * role    - Local role
  * service - Remote service

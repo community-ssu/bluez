@@ -45,7 +45,7 @@ static inline void sbc_analyze_four_mmx(const int16_t *in, int32_t *out,
 		1 << (SBC_PROTO_FIXED4_SCALE - 1),
 		1 << (SBC_PROTO_FIXED4_SCALE - 1),
 	};
-	asm volatile (
+	__asm__ volatile (
 		"movq        (%0), %%mm0\n"
 		"movq       8(%0), %%mm1\n"
 		"pmaddwd     (%1), %%mm0\n"
@@ -101,7 +101,7 @@ static inline void sbc_analyze_four_mmx(const int16_t *in, int32_t *out,
 		:
 		: "r" (in), "r" (consts), "r" (&round_c), "r" (out),
 			"i" (SBC_PROTO_FIXED4_SCALE)
-		: "memory");
+		: "cc", "memory");
 }
 
 static inline void sbc_analyze_eight_mmx(const int16_t *in, int32_t *out,
@@ -111,7 +111,7 @@ static inline void sbc_analyze_eight_mmx(const int16_t *in, int32_t *out,
 		1 << (SBC_PROTO_FIXED8_SCALE - 1),
 		1 << (SBC_PROTO_FIXED8_SCALE - 1),
 	};
-	asm volatile (
+	__asm__ volatile (
 		"movq        (%0), %%mm0\n"
 		"movq       8(%0), %%mm1\n"
 		"movq      16(%0), %%mm2\n"
@@ -243,7 +243,7 @@ static inline void sbc_analyze_eight_mmx(const int16_t *in, int32_t *out,
 		:
 		: "r" (in), "r" (consts), "r" (&round_c), "r" (out),
 			"i" (SBC_PROTO_FIXED8_SCALE)
-		: "memory");
+		: "cc", "memory");
 }
 
 static inline void sbc_analyze_4b_4s_mmx(int16_t *x, int32_t *out,
@@ -258,7 +258,7 @@ static inline void sbc_analyze_4b_4s_mmx(int16_t *x, int32_t *out,
 	out += out_stride;
 	sbc_analyze_four_mmx(x + 0, out, analysis_consts_fixed4_simd_even);
 
-	asm volatile ("emms\n");
+	__asm__ volatile ("emms\n");
 }
 
 static inline void sbc_analyze_4b_8s_mmx(int16_t *x, int32_t *out,
@@ -273,7 +273,60 @@ static inline void sbc_analyze_4b_8s_mmx(int16_t *x, int32_t *out,
 	out += out_stride;
 	sbc_analyze_eight_mmx(x + 0, out, analysis_consts_fixed8_simd_even);
 
-	asm volatile ("emms\n");
+	__asm__ volatile ("emms\n");
+}
+
+static void sbc_calc_scalefactors_mmx(
+	int32_t sb_sample_f[16][2][8],
+	uint32_t scale_factor[2][8],
+	int blocks, int channels, int subbands)
+{
+	static const SBC_ALIGNED int32_t consts[2] = {
+		1 << SCALE_OUT_BITS,
+		1 << SCALE_OUT_BITS,
+	};
+	int ch, sb;
+	intptr_t blk;
+	for (ch = 0; ch < channels; ch++) {
+		for (sb = 0; sb < subbands; sb += 2) {
+			blk = (blocks - 1) * (((char *) &sb_sample_f[1][0][0] -
+				(char *) &sb_sample_f[0][0][0]));
+			__asm__ volatile (
+				"movq         (%4), %%mm0\n"
+			"1:\n"
+				"movq     (%1, %0), %%mm1\n"
+				"pxor        %%mm2, %%mm2\n"
+				"pcmpgtd     %%mm2, %%mm1\n"
+				"paddd    (%1, %0), %%mm1\n"
+				"pcmpgtd     %%mm1, %%mm2\n"
+				"pxor        %%mm2, %%mm1\n"
+
+				"por         %%mm1, %%mm0\n"
+
+				"sub            %2, %0\n"
+				"jns            1b\n"
+
+				"movd        %%mm0, %k0\n"
+				"psrlq         $32, %%mm0\n"
+				"bsrl          %k0, %k0\n"
+				"subl           %5, %k0\n"
+				"movl          %k0, (%3)\n"
+
+				"movd        %%mm0, %k0\n"
+				"bsrl          %k0, %k0\n"
+				"subl           %5, %k0\n"
+				"movl          %k0, 4(%3)\n"
+			: "+r" (blk)
+			: "r" (&sb_sample_f[0][ch][sb]),
+				"i" ((char *) &sb_sample_f[1][0][0] -
+					(char *) &sb_sample_f[0][0][0]),
+				"r" (&scale_factor[ch][sb]),
+				"r" (&consts),
+				"i" (SCALE_OUT_BITS)
+			: "cc", "memory");
+		}
+	}
+	__asm__ volatile ("emms\n");
 }
 
 static int check_mmx_support(void)
@@ -282,7 +335,7 @@ static int check_mmx_support(void)
 	return 1; /* We assume that all 64-bit processors have MMX support */
 #else
 	int cpuid_feature_information;
-	asm volatile (
+	__asm__ volatile (
 		/* According to Intel manual, CPUID instruction is supported
 		 * if the value of ID bit (bit 21) in EFLAGS can be modified */
 		"pushf\n"
@@ -314,6 +367,7 @@ void sbc_init_primitives_mmx(struct sbc_encoder_state *state)
 	if (check_mmx_support()) {
 		state->sbc_analyze_4b_4s = sbc_analyze_4b_4s_mmx;
 		state->sbc_analyze_4b_8s = sbc_analyze_4b_8s_mmx;
+		state->sbc_calc_scalefactors = sbc_calc_scalefactors_mmx;
 		state->implementation_info = "MMX";
 	}
 }

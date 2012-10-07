@@ -2,7 +2,7 @@
  *
  *  D-Bus helper library
  *
- *  Copyright (C) 2004-2010  Marcel Holtmann <marcel@holtmann.org>
+ *  Copyright (C) 2004-2011  Marcel Holtmann <marcel@holtmann.org>
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -95,6 +95,7 @@ static gboolean watch_func(GIOChannel *chan, GIOCondition cond, gpointer data)
 {
 	struct watch_info *info = data;
 	unsigned int flags = 0;
+	DBusDispatchStatus status;
 
 	dbus_connection_ref(info->conn);
 
@@ -104,6 +105,9 @@ static gboolean watch_func(GIOChannel *chan, GIOCondition cond, gpointer data)
 	if (cond & G_IO_ERR) flags |= DBUS_WATCH_ERROR;
 
 	dbus_watch_handle(info->watch, flags);
+
+	status = dbus_connection_get_dispatch_status(info->conn);
+	queue_dispatch(info->conn, status);
 
 	dbus_connection_unref(info->conn);
 
@@ -226,9 +230,6 @@ static dbus_bool_t add_timeout(DBusTimeout *timeout, void *data)
 
 static void remove_timeout(DBusTimeout *timeout, void *data)
 {
-	if (dbus_timeout_get_enabled(timeout))
-		return;
-
 	/* will trigger timeout_handler_free() */
 	dbus_timeout_set_data(timeout, NULL, NULL);
 }
@@ -262,12 +263,36 @@ static inline void setup_dbus_with_main_loop(DBusConnection *conn)
 								NULL, NULL);
 }
 
+static gboolean setup_bus(DBusConnection *conn, const char *name,
+						DBusError *error)
+{
+	gboolean result;
+	DBusDispatchStatus status;
+
+	if (name != NULL) {
+		result = g_dbus_request_name(conn, name, error);
+
+		if (error != NULL) {
+			if (dbus_error_is_set(error) == TRUE)
+				return FALSE;
+		}
+
+		if (result == FALSE)
+			return FALSE;
+	}
+
+	setup_dbus_with_main_loop(conn);
+
+	status = dbus_connection_get_dispatch_status(conn);
+	queue_dispatch(conn, status);
+
+	return TRUE;
+}
+
 DBusConnection *g_dbus_setup_bus(DBusBusType type, const char *name,
 							DBusError *error)
 {
 	DBusConnection *conn;
-	DBusDispatchStatus status;
-	gboolean result;
 
 	conn = dbus_bus_get(type, error);
 
@@ -279,24 +304,33 @@ DBusConnection *g_dbus_setup_bus(DBusBusType type, const char *name,
 	if (conn == NULL)
 		return NULL;
 
-	if (name != NULL) {
-		result = g_dbus_request_name(conn, name, error);
-
-		if (error != NULL) {
-			if (dbus_error_is_set(error) == TRUE)
-				result = FALSE;
-		}
-
-		if (result == FALSE) {
-			dbus_connection_unref(conn);
-			return NULL;
-		}
+	if (setup_bus(conn, name, error) == FALSE) {
+		dbus_connection_unref(conn);
+		return NULL;
 	}
 
-	setup_dbus_with_main_loop(conn);
+	return conn;
+}
 
-	status = dbus_connection_get_dispatch_status(conn);
-	queue_dispatch(conn, status);
+DBusConnection *g_dbus_setup_private(DBusBusType type, const char *name,
+							DBusError *error)
+{
+	DBusConnection *conn;
+
+	conn = dbus_bus_get_private(type, error);
+
+	if (error != NULL) {
+		if (dbus_error_is_set(error) == TRUE)
+			return NULL;
+	}
+
+	if (conn == NULL)
+		return NULL;
+
+	if (setup_bus(conn, name, error) == FALSE) {
+		dbus_connection_unref(conn);
+		return NULL;
+	}
 
 	return conn;
 }
@@ -314,8 +348,12 @@ gboolean g_dbus_request_name(DBusConnection *connection, const char *name,
 			return FALSE;
 	}
 
-	if (result != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER)
+	if (result != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
+		if (error != NULL)
+			dbus_set_error(error, name, "Name already in use");
+
 		return FALSE;
+	}
 
 	return TRUE;
 }

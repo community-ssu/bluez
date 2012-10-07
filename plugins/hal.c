@@ -29,13 +29,10 @@
 #include <dbus/dbus.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
 
 #include "plugin.h"
 #include "adapter.h"
-#include "logging.h"
-#include "dbus-hci.h"
+#include "log.h"
 
 static void formfactor_reply(DBusPendingCall *call, void *user_data)
 {
@@ -59,7 +56,7 @@ static void formfactor_reply(DBusPendingCall *call, void *user_data)
 		return;
 	}
 
-	debug("Computer is classified as %s", formfactor);
+	DBG("Computer is classified as %s", formfactor);
 
 	if (formfactor != NULL) {
 		if (g_str_equal(formfactor, "laptop") == TRUE)
@@ -75,7 +72,7 @@ static void formfactor_reply(DBusPendingCall *call, void *user_data)
 	dbus_message_unref(reply);
 
 	/* Computer major class */
-	debug("Setting 0x%06x for major/minor device class", (1 << 8) | minor);
+	DBG("Setting 0x%06x for major/minor device class", (1 << 8) | minor);
 
 	btd_adapter_set_class(adapter, 0x01, minor);
 }

@@ -59,7 +59,7 @@
 #define CSR_TYPE_ARRAY		CSR_TYPE_COMPLEX
 #define CSR_TYPE_BDADDR		CSR_TYPE_COMPLEX
 
-static inline int transport_open(int transport, char *device)
+static inline int transport_open(int transport, char *device, speed_t bcsp_rate)
 {
 	switch (transport) {
 	case CSR_TRANSPORT_HCI:
@@ -69,7 +69,7 @@ static inline int transport_open(int transport, char *device)
 		return csr_open_usb(device);
 #endif
 	case CSR_TRANSPORT_BCSP:
-		return csr_open_bcsp(device);
+		return csr_open_bcsp(device, bcsp_rate);
 	case CSR_TRANSPORT_H4:
 		return csr_open_h4(device);
 	case CSR_TRANSPORT_3WIRE:
@@ -253,10 +253,8 @@ static int cmd_builddef(int transport, int argc, char *argv[])
 		array[1] = def >> 8;
 
 		err = transport_read(transport, CSR_VARID_GET_NEXT_BUILDDEF, array, 8);
-		if (err < 0) {
-			errno = -err;
+		if (err < 0)
 			break;
-		}
 
 		nextdef = array[2] | (array[3] << 8);
 
@@ -286,10 +284,8 @@ static int cmd_keylen(int transport, int argc, char *argv[])
 	array[1] = handle >> 8;
 
 	err = transport_read(transport, CSR_VARID_CRYPT_KEY_LENGTH, array, 8);
-	if (err < 0) {
-		errno = -err;
+	if (err < 0)
 		return -1;
-	}
 
 	handle = array[0] | (array[1] << 8);
 	keylen = array[2] | (array[3] << 8);
@@ -310,10 +306,8 @@ static int cmd_clock(int transport, int argc, char *argv[])
 	memset(array, 0, sizeof(array));
 
 	err = transport_read(transport, CSR_VARID_BT_CLOCK, array, 8);
-	if (err < 0) {
-		errno = -err;
+	if (err < 0)
 		return -1;
-	}
 
 	clock = array[2] | (array[3] << 8) | (array[0] << 16) | (array[1] << 24);
 
@@ -333,10 +327,8 @@ static int cmd_rand(int transport, int argc, char *argv[])
 	memset(array, 0, sizeof(array));
 
 	err = transport_read(transport, CSR_VARID_RAND, array, 8);
-	if (err < 0) {
-		errno = -err;
+	if (err < 0)
 		return -1;
-	}
 
 	rand = array[0] | (array[1] << 8);
 
@@ -357,10 +349,8 @@ static int cmd_chiprev(int transport, int argc, char *argv[])
 	memset(array, 0, sizeof(array));
 
 	err = transport_read(transport, CSR_VARID_CHIPREV, array, 8);
-	if (err < 0) {
-		errno = -err;
+	if (err < 0)
 		return -1;
-	}
 
 	rev = array[0] | (array[1] << 8);
 
@@ -417,10 +407,8 @@ static int cmd_buildname(int transport, int argc, char *argv[])
 	memset(array, 0, sizeof(array));
 
 	err = transport_read(transport, CSR_VARID_READ_BUILD_NAME, array, 128);
-	if (err < 0) {
-		errno = -err;
+	if (err < 0)
 		return -1;
-	}
 
 	for (i = 0; i < sizeof(name); i++)
 		name[i] = array[(i * 2) + 4];
@@ -441,10 +429,8 @@ static int cmd_panicarg(int transport, int argc, char *argv[])
 	memset(array, 0, sizeof(array));
 
 	err = transport_read(transport, CSR_VARID_PANIC_ARG, array, 8);
-	if (err < 0) {
-		errno = -err;
+	if (err < 0)
 		return -1;
-	}
 
 	error = array[0] | (array[1] << 8);
 
@@ -465,10 +451,8 @@ static int cmd_faultarg(int transport, int argc, char *argv[])
 	memset(array, 0, sizeof(array));
 
 	err = transport_read(transport, CSR_VARID_FAULT_ARG, array, 8);
-	if (err < 0) {
-		errno = -err;
+	if (err < 0)
 		return -1;
-	}
 
 	error = array[0] | (array[1] << 8);
 
@@ -984,7 +968,7 @@ static int cmd_psread(int transport, int argc, char *argv[])
 			str = NULL;
 		}
 
-		printf("// %s%s\n&%04x =", str ? "PSKEY_" : "", 
+		printf("// %s%s\n&%04x =", str ? "PSKEY_" : "",
 						str ? str : val, pskey);
 		for (i = 0; i < length; i++)
 			printf(" %02x%02x", array[(i * 2) + 7], array[(i * 2) + 6]);
@@ -1109,6 +1093,7 @@ static void usage(void)
 	printf("Options:\n"
 		"\t-t <transport>     Select the transport\n"
 		"\t-d <device>        Select the device\n"
+		"\t-b <bcsp rate>     Select the bcsp transfer rate\n"
 		"\t-h, --help         Display help\n"
 		"\n");
 
@@ -1137,6 +1122,7 @@ static void usage(void)
 static struct option main_options[] = {
 	{ "transport",	1, 0, 't' },
 	{ "device",	1, 0, 'd' },
+	{ "bcsprate", 1, 0, 'b'},
 	{ "help",	0, 0, 'h' },
 	{ 0, 0, 0, 0 }
 };
@@ -1145,8 +1131,9 @@ int main(int argc, char *argv[])
 {
 	char *device = NULL;
 	int i, err, opt, transport = CSR_TRANSPORT_HCI;
+	speed_t bcsp_rate = B38400;
 
-	while ((opt=getopt_long(argc, argv, "+t:d:i:h", main_options, NULL)) != EOF) {
+	while ((opt=getopt_long(argc, argv, "+t:d:i:b:h", main_options, NULL)) != EOF) {
 		switch (opt) {
 		case 't':
 			if (!strcasecmp(optarg, "hci"))
@@ -1171,7 +1158,39 @@ int main(int argc, char *argv[])
 		case 'i':
 			device = strdup(optarg);
 			break;
-
+		case 'b':
+			switch (atoi(optarg)) {
+			case 9600: bcsp_rate = B9600; break;
+			case 19200: bcsp_rate = B19200; break;
+			case 38400: bcsp_rate = B38400; break;
+			case 57600: bcsp_rate = B57600; break;
+			case 115200: bcsp_rate = B115200; break;
+			case 230400: bcsp_rate = B230400; break;
+			case 460800: bcsp_rate = B460800; break;
+			case 500000: bcsp_rate = B500000; break;
+			case 576000: bcsp_rate = B576000; break;
+			case 921600: bcsp_rate = B921600; break;
+			case 1000000: bcsp_rate = B1000000; break;
+			case 1152000: bcsp_rate = B1152000; break;
+			case 1500000: bcsp_rate = B1500000; break;
+			case 2000000: bcsp_rate = B2000000; break;
+#ifdef B2500000
+			case 2500000: bcsp_rate = B2500000; break;
+#endif
+#ifdef B3000000
+			case 3000000: bcsp_rate = B3000000; break;
+#endif
+#ifdef B3500000
+			case 3500000: bcsp_rate = B3500000; break;
+#endif
+#ifdef B4000000
+			case 4000000: bcsp_rate = B4000000; break;
+#endif
+			default:
+				printf("Unknown BCSP baud rate specified, defaulting to 38400bps\n");
+				bcsp_rate = B38400;
+			}
+			break;
 		case 'h':
 		default:
 			usage();
@@ -1188,11 +1207,10 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (transport_open(transport, device) < 0)
+	if (transport_open(transport, device, bcsp_rate) < 0)
 		exit(1);
 
-	if (device)
-		free(device);
+	free(device);
 
 	for (i = 0; commands[i].str; i++) {
 		if (strcasecmp(commands[i].str, argv[0]))

@@ -45,10 +45,10 @@
 
 #include <glib.h>
 
-#include "logging.h"
+#include "log.h"
 #include "sdpd.h"
 
-static GIOChannel *l2cap_io = NULL, *unix_io = NULL;
+static guint l2cap_id = 0, unix_id = 0;
 
 static int l2cap_sock, unix_sock;
 
@@ -113,7 +113,10 @@ static int init_server(uint16_t mtu, int master, int compat)
 		}
 	}
 
-	listen(l2cap_sock, 5);
+	if (listen(l2cap_sock, 5) < 0) {
+		error("listen: %s", strerror(errno));
+		return -1;
+	}
 
 	if (!compat) {
 		unix_sock = -1;
@@ -138,7 +141,10 @@ static int init_server(uint16_t mtu, int master, int compat)
 		return -1;
 	}
 
-	listen(unix_sock, 5);
+	if (listen(unix_sock, 5) < 0) {
+		error("listen UNIX socket: %s", strerror(errno));
+		return -1;
+	}
 
 	chmod(SDP_UNIX_PATH, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
@@ -189,10 +195,8 @@ static gboolean io_accept_event(GIOChannel *chan, GIOCondition cond, gpointer da
 	GIOChannel *io;
 	int nsk;
 
-	if (cond & (G_IO_HUP | G_IO_ERR | G_IO_NVAL)) {
-		g_io_channel_unref(chan);
+	if (cond & (G_IO_HUP | G_IO_ERR | G_IO_NVAL))
 		return FALSE;
-	}
 
 	if (data == &l2cap_sock) {
 		struct sockaddr_l2 addr;
@@ -227,6 +231,7 @@ int start_sdp_server(uint16_t mtu, const char *did, uint32_t flags)
 {
 	int compat = flags & SDP_SERVER_COMPAT;
 	int master = flags & SDP_SERVER_MASTER;
+	GIOChannel *io;
 
 	info("Starting SDP server");
 
@@ -250,18 +255,21 @@ int start_sdp_server(uint16_t mtu, const char *did, uint32_t flags)
 		}
 	}
 
-	l2cap_io = g_io_channel_unix_new(l2cap_sock);
-	g_io_channel_set_close_on_unref(l2cap_io, TRUE);
+	io = g_io_channel_unix_new(l2cap_sock);
+	g_io_channel_set_close_on_unref(io, TRUE);
 
-	g_io_add_watch(l2cap_io, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+	l2cap_id = g_io_add_watch(io, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
 					io_accept_event, &l2cap_sock);
+	g_io_channel_unref(io);
 
 	if (compat && unix_sock > fileno(stderr)) {
-		unix_io = g_io_channel_unix_new(unix_sock);
-		g_io_channel_set_close_on_unref(unix_io, TRUE);
+		io = g_io_channel_unix_new(unix_sock);
+		g_io_channel_set_close_on_unref(io, TRUE);
 
-		g_io_add_watch(unix_io, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+		unix_id = g_io_add_watch(io,
+					G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
 					io_accept_event, &unix_sock);
+		g_io_channel_unref(io);
 	}
 
 	return 0;
@@ -273,9 +281,12 @@ void stop_sdp_server(void)
 
 	sdp_svcdb_reset();
 
-	if (unix_io)
-		g_io_channel_unref(unix_io);
+	if (unix_id > 0)
+		g_source_remove(unix_id);
 
-	if (l2cap_io)
-		g_io_channel_unref(l2cap_io);
+	if (l2cap_id > 0)
+		g_source_remove(l2cap_id);
+
+	l2cap_id = unix_id = 0;
+	l2cap_sock = unix_sock = -1;
 }

@@ -33,25 +33,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
-#include <sys/stat.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
+#include <sys/signalfd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
+#include <bluetooth/uuid.h>
 
 #include <glib.h>
 
 #include <dbus/dbus.h>
 
-#include "logging.h"
+#include <gdbus.h>
+
+#include "log.h"
 
 #include "hcid.h"
 #include "sdpd.h"
 #include "adapter.h"
-#include "dbus-hci.h"
 #include "dbus-common.h"
 #include "agent.h"
 #include "manager.h"
@@ -60,7 +59,12 @@
 #include <cap-ng.h>
 #endif
 
+#define BLUEZ_NAME "org.bluez"
+
 #define LAST_ADAPTER_EXIT_TIMEOUT 30
+
+#define DEFAULT_DISCOVERABLE_TIMEOUT 180 /* 3 minutes */
+#define DEFAULT_AUTO_CONNECT_TIMEOUT  60 /* 60 seconds */
 
 struct main_opts main_opts;
 
@@ -93,15 +97,15 @@ static void parse_config(GKeyFile *config)
 	if (!config)
 		return;
 
-	debug("parsing main.conf");
+	DBG("parsing main.conf");
 
 	val = g_key_file_get_integer(config, "General",
 						"DiscoverableTimeout", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else {
-		debug("discovto=%d", val);
+		DBG("discovto=%d", val);
 		main_opts.discovto = val;
 		main_opts.flags |= 1 << HCID_SET_DISCOVTO;
 	}
@@ -109,29 +113,39 @@ static void parse_config(GKeyFile *config)
 	val = g_key_file_get_integer(config, "General",
 						"PairableTimeout", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else {
-		debug("pairto=%d", val);
+		DBG("pairto=%d", val);
 		main_opts.pairto = val;
 	}
 
 	val = g_key_file_get_integer(config, "General", "PageTimeout", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else {
-		debug("pageto=%d", val);
+		DBG("pageto=%d", val);
 		main_opts.pageto = val;
 		main_opts.flags |= 1 << HCID_SET_PAGETO;
 	}
 
-	str = g_key_file_get_string(config, "General", "Name", &err);
+	val = g_key_file_get_integer(config, "General", "AutoConnectTimeout",
+									&err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else {
-		debug("name=%s", str);
+		DBG("auto_to=%d", val);
+		main_opts.autoto = val;
+	}
+
+	str = g_key_file_get_string(config, "General", "Name", &err);
+	if (err) {
+		DBG("%s", err->message);
+		g_clear_error(&err);
+	} else {
+		DBG("name=%s", str);
 		g_free(main_opts.name);
 		main_opts.name = g_strdup(str);
 		main_opts.flags |= 1 << HCID_SET_NAME;
@@ -140,10 +154,10 @@ static void parse_config(GKeyFile *config)
 
 	str = g_key_file_get_string(config, "General", "Class", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else {
-		debug("class=%s", str);
+		DBG("class=%s", str);
 		main_opts.class = strtol(str, NULL, 16);
 		main_opts.flags |= 1 << HCID_SET_CLASS;
 		g_free(str);
@@ -152,17 +166,17 @@ static void parse_config(GKeyFile *config)
 	val = g_key_file_get_integer(config, "General",
 					"DiscoverSchedulerInterval", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else {
-		debug("discov_interval=%d", val);
+		DBG("discov_interval=%d", val);
 		main_opts.discov_interval = val;
 	}
 
 	boolean = g_key_file_get_boolean(config, "General",
 						"InitiallyPowered", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else if (boolean == FALSE)
 		main_opts.mode = MODE_OFF;
@@ -170,17 +184,17 @@ static void parse_config(GKeyFile *config)
 	boolean = g_key_file_get_boolean(config, "General",
 						"RememberPowered", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else
 		main_opts.remember_powered = boolean;
 
 	str = g_key_file_get_string(config, "General", "DeviceID", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else {
-		debug("deviceid=%s", str);
+		DBG("deviceid=%s", str);
 		strncpy(main_opts.deviceid, str,
 					sizeof(main_opts.deviceid) - 1);
 		g_free(str);
@@ -189,7 +203,7 @@ static void parse_config(GKeyFile *config)
 	boolean = g_key_file_get_boolean(config, "General",
 						"ReverseServiceDiscovery", &err);
 	if (err) {
-		debug("%s", err->message);
+		DBG("%s", err->message);
 		g_clear_error(&err);
 	} else
 		main_opts.reverse_sdp = boolean;
@@ -201,78 +215,34 @@ static void parse_config(GKeyFile *config)
 	else
 		main_opts.name_resolv = boolean;
 
+	boolean = g_key_file_get_boolean(config, "General",
+						"DebugKeys", &err);
+	if (err)
+		g_clear_error(&err);
+	else
+		main_opts.debug_keys = boolean;
+
+	boolean = g_key_file_get_boolean(config, "General",
+						"AttributeServer", &err);
+	if (err)
+		g_clear_error(&err);
+	else
+		main_opts.attrib_server = boolean;
+
 	main_opts.link_mode = HCI_LM_ACCEPT;
 
 	main_opts.link_policy = HCI_LP_RSWITCH | HCI_LP_SNIFF |
 						HCI_LP_HOLD | HCI_LP_PARK;
 }
 
-/*
- * Device name expansion
- *   %d - device id
- */
-char *expand_name(char *dst, int size, char *str, int dev_id)
-{
-	register int sp, np, olen;
-	char *opt, buf[10];
-
-	if (!str || !dst)
-		return NULL;
-
-	sp = np = 0;
-	while (np < size - 1 && str[sp]) {
-		switch (str[sp]) {
-		case '%':
-			opt = NULL;
-
-			switch (str[sp+1]) {
-			case 'd':
-				sprintf(buf, "%d", dev_id);
-				opt = buf;
-				break;
-
-			case 'h':
-				opt = main_opts.host_name;
-				break;
-
-			case '%':
-				dst[np++] = str[sp++];
-				/* fall through */
-			default:
-				sp++;
-				continue;
-			}
-
-			if (opt) {
-				/* substitute */
-				olen = strlen(opt);
-				if (np + olen < size - 1)
-					memcpy(dst + np, opt, olen);
-				np += olen;
-			}
-			sp += 2;
-			continue;
-
-		case '\\':
-			sp++;
-			/* fall through */
-		default:
-			dst[np++] = str[sp++];
-			break;
-		}
-	}
-	dst[np] = '\0';
-	return dst;
-}
-
 static void init_defaults(void)
 {
 	/* Default HCId settings */
 	memset(&main_opts, 0, sizeof(main_opts));
-	main_opts.scan	= SCAN_PAGE;
 	main_opts.mode	= MODE_CONNECTABLE;
 	main_opts.name	= g_strdup("BlueZ");
-	main_opts.discovto	= HCID_DEFAULT_DISCOVERABLE_TIMEOUT;
+	main_opts.discovto	= DEFAULT_DISCOVERABLE_TIMEOUT;
+	main_opts.autoto = DEFAULT_AUTO_CONNECT_TIMEOUT;
 	main_opts.remember_powered = TRUE;
 	main_opts.reverse_sdp = TRUE;
 	main_opts.name_resolv = TRUE;
@@ -283,18 +253,89 @@ static void init_defaults(void)
 
 static GMainLoop *event_loop;
 
-static void sig_term(int sig)
+static unsigned int __terminated = 0;
+
+static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
+							gpointer user_data)
 {
-	g_main_loop_quit(event_loop);
+	struct signalfd_siginfo si;
+	ssize_t result;
+	int fd;
+
+	if (cond & (G_IO_NVAL | G_IO_ERR | G_IO_HUP))
+		return FALSE;
+
+	fd = g_io_channel_unix_get_fd(channel);
+
+	result = read(fd, &si, sizeof(si));
+	if (result != sizeof(si))
+		return FALSE;
+
+	switch (si.ssi_signo) {
+	case SIGINT:
+	case SIGTERM:
+		if (__terminated == 0) {
+			info("Terminating");
+			g_main_loop_quit(event_loop);
+		}
+
+		__terminated = 1;
+		break;
+	case SIGUSR2:
+		__btd_toggle_debug();
+		break;
+	case SIGPIPE:
+		/* ignore */
+		break;
+	}
+
+	return TRUE;
 }
 
-static void sig_debug(int sig)
+static guint setup_signalfd(void)
 {
-	toggle_debug();
+	GIOChannel *channel;
+	guint source;
+	sigset_t mask;
+	int fd;
+
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGINT);
+	sigaddset(&mask, SIGTERM);
+	sigaddset(&mask, SIGUSR2);
+	sigaddset(&mask, SIGPIPE);
+
+	if (sigprocmask(SIG_BLOCK, &mask, NULL) < 0) {
+		perror("Failed to set signal mask");
+		return 0;
+	}
+
+	fd = signalfd(-1, &mask, 0);
+	if (fd < 0) {
+		perror("Failed to create signal descriptor");
+		return 0;
+	}
+
+	channel = g_io_channel_unix_new(fd);
+
+	g_io_channel_set_close_on_unref(channel, TRUE);
+	g_io_channel_set_encoding(channel, NULL, NULL);
+	g_io_channel_set_buffered(channel, FALSE);
+
+	source = g_io_add_watch(channel,
+				G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+				signal_handler, NULL);
+
+	g_io_channel_unref(channel);
+
+	return source;
 }
 
+static gchar *option_debug = NULL;
+static gchar *option_plugin = NULL;
+static gchar *option_noplugin = NULL;
 static gboolean option_detach = TRUE;
-static gboolean option_debug = FALSE;
+static gboolean option_version = FALSE;
 static gboolean option_udev = FALSE;
 
 static guint last_adapter_timeout = 0;
@@ -327,12 +368,69 @@ void btd_stop_exit_timer(void)
 	last_adapter_timeout = 0;
 }
 
+static void disconnect_dbus(void)
+{
+	DBusConnection *conn = get_dbus_connection();
+
+	if (!conn || !dbus_connection_get_is_connected(conn))
+		return;
+
+	manager_cleanup(conn, "/");
+
+	set_dbus_connection(NULL);
+
+	dbus_connection_unref(conn);
+}
+
+static int connect_dbus(void)
+{
+	DBusConnection *conn;
+	DBusError err;
+
+	dbus_error_init(&err);
+
+	conn = g_dbus_setup_bus(DBUS_BUS_SYSTEM, BLUEZ_NAME, &err);
+	if (!conn) {
+		if (dbus_error_is_set(&err)) {
+			g_printerr("D-Bus setup failed: %s\n", err.message);
+			dbus_error_free(&err);
+			return -EIO;
+		}
+		return -EALREADY;
+	}
+
+	if (!manager_init(conn, "/"))
+		return -EIO;
+
+	set_dbus_connection(conn);
+
+	return 0;
+}
+
+static gboolean parse_debug(const char *key, const char *value,
+				gpointer user_data, GError **error)
+{
+	if (value)
+		option_debug = g_strdup(value);
+	else
+		option_debug = g_strdup("*");
+
+	return TRUE;
+}
+
 static GOptionEntry options[] = {
-	{ "nodaemon", 'n', G_OPTION_FLAG_REVERSE,
+	{ "debug", 'd', G_OPTION_FLAG_OPTIONAL_ARG,
+				G_OPTION_ARG_CALLBACK, parse_debug,
+				"Specify debug options to enable", "DEBUG" },
+	{ "plugin", 'p', 0, G_OPTION_ARG_STRING, &option_plugin,
+				"Specify plugins to load", "NAME,..," },
+	{ "noplugin", 'P', 0, G_OPTION_ARG_STRING, &option_noplugin,
+				"Specify plugins not to load", "NAME,..." },
+	{ "nodetach", 'n', G_OPTION_FLAG_REVERSE,
 				G_OPTION_ARG_NONE, &option_detach,
 				"Don't run as daemon in background" },
-	{ "debug", 'd', 0, G_OPTION_ARG_NONE, &option_debug,
-				"Enable debug information output" },
+	{ "version", 'v', 0, G_OPTION_ARG_NONE, &option_version,
+				"Show version information and exit" },
 	{ "udev", 'u', 0, G_OPTION_ARG_NONE, &option_udev,
 				"Run from udev mode of operation" },
 	{ NULL },
@@ -342,9 +440,9 @@ int main(int argc, char *argv[])
 {
 	GOptionContext *context;
 	GError *err = NULL;
-	struct sigaction sa;
 	uint16_t mtu = 0;
 	GKeyFile *config;
+	guint signal;
 
 	init_defaults();
 
@@ -369,19 +467,24 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	g_option_context_free(context);
+
+	if (option_version == TRUE) {
+		printf("%s\n", VERSION);
+		exit(0);
+	}
+
 	if (option_udev == TRUE) {
 		int err;
 
 		option_detach = TRUE;
-		err = hcid_dbus_init();
+		err = connect_dbus();
 		if (err < 0) {
 			if (err == -EALREADY)
 				exit(0);
 			exit(1);
 		}
 	}
-
-	g_option_context_free(context);
 
 	if (option_detach == TRUE && option_udev == FALSE) {
 		if (daemon(0, 0)) {
@@ -392,24 +495,11 @@ int main(int argc, char *argv[])
 
 	umask(0077);
 
-	start_logging("bluetoothd", "Bluetooth daemon %s", VERSION);
+	event_loop = g_main_loop_new(NULL, FALSE);
 
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_flags = SA_NOCLDSTOP;
-	sa.sa_handler = sig_term;
-	sigaction(SIGTERM, &sa, NULL);
-	sigaction(SIGINT,  &sa, NULL);
+	signal = setup_signalfd();
 
-	sa.sa_handler = sig_debug;
-	sigaction(SIGUSR2, &sa, NULL);
-
-	sa.sa_handler = SIG_IGN;
-	sigaction(SIGPIPE, &sa, NULL);
-
-	if (option_debug == TRUE) {
-		info("Enabling debug information");
-		enable_debug();
-	}
+	__btd_log_init(option_debug, option_detach);
 
 	config = load_config(CONFIGDIR "/main.conf");
 
@@ -418,7 +508,7 @@ int main(int argc, char *argv[])
 	agent_init();
 
 	if (option_udev == FALSE) {
-		if (hcid_dbus_init() < 0) {
+		if (connect_dbus() < 0) {
 			error("Unable to get on D-Bus");
 			exit(1);
 		}
@@ -435,9 +525,7 @@ int main(int argc, char *argv[])
 	 * the plugins might wanna expose some paths on the bus. However the
 	 * best order of how to init various subsystems of the Bluetooth
 	 * daemon needs to be re-worked. */
-	plugin_init(config);
-
-	event_loop = g_main_loop_new(NULL, FALSE);
+	plugin_init(config, option_plugin, option_noplugin);
 
 	if (adapter_ops_setup() < 0) {
 		error("adapter_ops_setup failed");
@@ -446,13 +534,13 @@ int main(int argc, char *argv[])
 
 	rfkill_init();
 
-	debug("Entering main loop");
+	DBG("Entering main loop");
 
 	g_main_loop_run(event_loop);
 
-	hcid_dbus_unregister();
+	g_source_remove(signal);
 
-	hcid_dbus_exit();
+	disconnect_dbus();
 
 	rfkill_exit();
 
@@ -469,7 +557,7 @@ int main(int argc, char *argv[])
 
 	info("Exit");
 
-	stop_logging();
+	__btd_log_cleanup();
 
 	return 0;
 }

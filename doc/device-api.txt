@@ -125,6 +125,18 @@ Properties	string Address [readonly]
 			The Bluetooth remote name. This value can not be
 			changed. Use the Alias property instead.
 
+		uint16 Vendor [readonly]
+
+			Vendor unique numeric identifier.
+
+		uint16 Product [readonly]
+
+			Product unique numeric identifier.
+
+		uint16 Version [readonly]
+
+			Version unique numeric identifier.
+
 		string Icon [readonly]
 
 			Proposed icon name according to the freedesktop.org
@@ -138,6 +150,10 @@ Properties	string Address [readonly]
 
 			List of 128-bit UUIDs that represents the available
 			remote services.
+
+		array{object} Services [readonly]
+
+			List of characteristics based services.
 
 		boolean Paired [readonly]
 
@@ -153,6 +169,13 @@ Properties	string Address [readonly]
 
 			Indicates if the remote is seen as trusted. This
 			setting can be changed by the application.
+
+		boolean Blocked [readwrite]
+
+			If set to true any incoming connections from the
+			device will be immediately rejected. Any device
+			drivers will also be removed and no new ones will
+			be probed as long as the device is blocked.
 
 		string Alias [readwrite]
 
@@ -174,7 +197,7 @@ Properties	string Address [readonly]
 
 		object Adapter [readonly]
 
-			The object path of the adpater the device belongs to.
+			The object path of the adapter the device belongs to.
 
 		boolean LegacyPairing [readonly]
 

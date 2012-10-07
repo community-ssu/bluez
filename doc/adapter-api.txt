@@ -19,8 +19,7 @@ Methods		dict GetProperties()
 			Returns all properties for the adapter. See the
 			properties section for available properties.
 
-			Possible Errors: org.bluez.Error.DoesNotExist
-					 org.bluez.Error.InvalidArguments
+			Possible Errors: org.bluez.Error.NotReady
 
 		void SetProperty(string name, variant value)
 
@@ -28,20 +27,29 @@ Methods		dict GetProperties()
 			properties that are listed a read-write are changeable.
 			On success this will emit a PropertyChanged signal.
 
-			Possible Errors: org.bluez.Error.DoesNotExist
-					 org.bluez.Error.InvalidArguments
+			Possible Errors: org.bluez.Error.InvalidArguments
 
 		void RequestSession()
 
-			This method will request a client session that
-			provides operational Bluetooth. A possible mode
-			change must be confirmed by the user via the agent.
+			This method requests a client session that provides
+			operational Bluetooth. A possible mode change must be
+			confirmed by the user via the agent.
+
+			Clients may request multiple sessions. All sessions
+			are released when adapter's mode is changed to off
+			state.
 
 			Possible Errors: org.bluez.Error.Rejected
 
 		void ReleaseSession()
 
-			Release a previous requested session.
+			Release a previously requested session. It sets
+			adapter to the mode in use on the moment of session
+			request.
+
+			SetProperty method call changes adapter's mode
+			persistently, such that session release will not
+			modify it.
 
 			Possible Errors: org.bluez.Error.DoesNotExist
 
@@ -80,9 +88,11 @@ Methods		dict GetProperties()
 			Possible Errors: org.bluez.Error.DoesNotExist
 					 org.bluez.Error.InvalidArguments
 
-		array{object} ListDevices()
+		array{object} ListDevices() {deprecated}
 
 			Returns list of device object paths.
+			This method is deprecated, instead use the Devices
+			Property to get the list of devices object paths.
 
 			Possible errors: org.bluez.Error.InvalidArguments
 					 org.bluez.Error.Failed
@@ -148,7 +158,7 @@ Methods		dict GetProperties()
 
 			This registers the adapter wide agent.
 
-			The object path defines the path the of the agent
+			The object path defines the path of the agent
 			that will be called when user input is needed.
 
 			If an application disconnects from the bus all
@@ -178,18 +188,19 @@ Signals		PropertyChanged(string name, variant value)
 
 		DeviceFound(string address, dict values)
 
-			This signal will be send every time an inquiry result
+			This signal will be sent every time an inquiry result
 			has been found by the service daemon. In general they
 			only appear during a device discovery.
 
-			The dictionary can contain bascially the same values
-			that we be returned by the GetProperties method
+			The dictionary can contain basically the same values
+			that are returned by the GetProperties method
 			from the org.bluez.Device interface. In addition there
-			can be values for the RSSI and the TX power level.
+			can be values for the RSSI, the TX power level and
+			Broadcaster role.
 
 		DeviceDisappeared(string address)
 
-			This signal will be send when an inquiry session for
+			This signal will be sent when an inquiry session for
 			a periodic discovery finishes and previously found
 			devices are no longer in range or visible.
 
@@ -217,7 +228,7 @@ Properties	string Address [readonly]
 		boolean Powered [readwrite]
 
 			Switch an adapter on or off. This will also set the
-			appropiate connectable state.
+			appropriate connectable state.
 
 		boolean Discoverable [readwrite]
 
@@ -246,7 +257,7 @@ Properties	string Address [readonly]
 			Note that this property only affects incoming pairing
 			requests.
 
-		uint32 PaireableTimeout [readwrite]
+		uint32 PairableTimeout [readwrite]
 
 			The pairable timeout in seconds. A value of zero
 			means that the timeout is disabled and it will stay in
@@ -268,3 +279,8 @@ Properties	string Address [readonly]
 		array{object} Devices [readonly]
 
 			List of device object paths.
+
+		array{string} UUIDs [readonly]
+
+			List of 128-bit UUIDs that represents the available
+			local services.

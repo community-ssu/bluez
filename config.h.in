@@ -30,6 +30,9 @@
 /* Define to 1 if you have the <string.h> header file. */
 #undef HAVE_STRING_H
 
+/* Define to 1 if you have <sys/inotify.h>. */
+#undef HAVE_SYS_INOTIFY_H
+
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #undef HAVE_SYS_STAT_H
 
@@ -43,8 +46,17 @@
    */
 #undef LT_OBJDIR
 
+/* Define to 1 if you need the dbus_connection_can_send_type() function. */
+#undef NEED_DBUS_CONNECTION_CAN_SEND_TYPE
+
 /* Define to 1 if you need the dbus_watch_get_unix_fd() function. */
 #undef NEED_DBUS_WATCH_GET_UNIX_FD
+
+/* Define to 1 if you need g_list_free_full() function. */
+#undef NEED_G_LIST_FREE_FULL
+
+/* Define to 1 if you need g_slist_free_full() function. */
+#undef NEED_G_SLIST_FREE_FULL
 
 /* Define to 1 if you need the ppoll() function. */
 #undef NEED_PPOLL
@@ -57,6 +69,9 @@
 
 /* Define to 1 if your C compiler doesn't accept -c and -o together. */
 #undef NO_MINUS_C_MINUS_O
+
+/* Define the OUI file path */
+#undef OUIFILE
 
 /* Name of package */
 #undef PACKAGE

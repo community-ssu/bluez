@@ -40,9 +40,8 @@
 #include "glib-helper.h"
 #include "btio.h"
 #include "plugin.h"
-#include "logging.h"
+#include "log.h"
 #include "device.h"
-#include "unix.h"
 #include "headset.h"
 #include "manager.h"
 #include "gateway.h"
@@ -102,11 +101,11 @@ static void sco_server_cb(GIOChannel *chan, GError *err, gpointer data)
 
 	if (device->headset) {
 		if (headset_get_state(device) < HEADSET_STATE_CONNECTED) {
-			debug("Refusing SCO from non-connected headset");
+			DBG("Refusing SCO from non-connected headset");
 			goto drop;
 		}
 
-		if (!get_hfp_active(device)) {
+		if (!headset_get_hfp_active(device)) {
 			error("Refusing non-HFP SCO connect attempt from %s",
 									addr);
 			goto drop;
@@ -118,7 +117,7 @@ static void sco_server_cb(GIOChannel *chan, GError *err, gpointer data)
 		headset_set_state(device, HEADSET_STATE_PLAYING);
 	} else if (device->gateway) {
 		if (!gateway_is_connected(device)) {
-			debug("Refusing SCO from non-connected AG");
+			DBG("Refusing SCO from non-connected AG");
 			goto drop;
 		}
 
@@ -130,7 +129,7 @@ static void sco_server_cb(GIOChannel *chan, GError *err, gpointer data)
 	sk = g_io_channel_unix_get_fd(chan);
 	fcntl(sk, F_SETFL, 0);
 
-	debug("Accepted SCO connection from %s", addr);
+	DBG("Accepted SCO connection from %s", addr);
 
 	return;
 
@@ -151,11 +150,6 @@ static int audio_init(void)
 
 	config = load_config_file(CONFIGDIR "/audio.conf");
 
-	if (unix_init() < 0) {
-		error("Unable to setup unix socket");
-		goto failed;
-	}
-
 	if (audio_manager_init(connection, config, &enable_sco) < 0)
 		goto failed;
 
@@ -174,7 +168,6 @@ static int audio_init(void)
 
 failed:
 	audio_manager_exit();
-	unix_exit();
 
 	if (connection) {
 		dbus_connection_unref(connection);
@@ -193,8 +186,6 @@ static void audio_exit(void)
 	}
 
 	audio_manager_exit();
-
-	unix_exit();
 
 	dbus_connection_unref(connection);
 }

@@ -31,15 +31,14 @@
 #include <netinet/in.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
 #include <bluetooth/bnep.h>
 #include <bluetooth/sdp.h>
 
 #include <glib.h>
 #include <gdbus.h>
 
-#include "logging.h"
-#include "glib-helper.h"
+#include "log.h"
+#include "glib-compat.h"
 #include "btio.h"
 #include "dbus-common.h"
 #include "adapter.h"
@@ -50,6 +49,8 @@
 #include "connection.h"
 
 #define NETWORK_PEER_INTERFACE "org.bluez.Network"
+#define CON_SETUP_RETRIES      3
+#define CON_SETUP_TO           9
 
 typedef enum {
 	CONNECTED,
@@ -74,6 +75,8 @@ struct network_conn {
 	guint		watch;		/* Disconnect watch */
 	guint		dc_id;
 	struct network_peer *peer;
+	guint		attempt_cnt;
+	guint 		timeout_source;
 };
 
 struct __service_16 {
@@ -82,15 +85,12 @@ struct __service_16 {
 } __attribute__ ((packed));
 
 static DBusConnection *connection = NULL;
-static const char *prefix = NULL;
 static GSList *peers = NULL;
 
 static struct network_peer *find_peer(GSList *list, const char *path)
 {
-	GSList *l;
-
-	for (l = list; l; l = l->next) {
-		struct network_peer *peer = l->data;
+	for (; list; list = list->next) {
+		struct network_peer *peer = list->data;
 
 		if (!strcmp(peer->path, path))
 			return peer;
@@ -101,48 +101,14 @@ static struct network_peer *find_peer(GSList *list, const char *path)
 
 static struct network_conn *find_connection(GSList *list, uint16_t id)
 {
-	GSList *l;
-
-	for (l = list; l; l = l->next) {
-		struct network_conn *nc = l->data;
+	for (; list; list = list->next) {
+		struct network_conn *nc = list->data;
 
 		if (nc->id == id)
 			return nc;
 	}
 
 	return NULL;
-}
-
-static inline DBusMessage *not_supported(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".Failed",
-							"Not supported");
-}
-
-static inline DBusMessage *already_connected(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".Failed",
-						"Device already connected");
-}
-
-static inline DBusMessage *not_connected(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".Failed",
-						"Device not connected");
-}
-
-static inline DBusMessage *not_permited(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".Failed",
-						"Operation not permited");
-}
-
-static inline DBusMessage *connection_attempt_failed(DBusMessage *msg,
-							const char *err)
-{
-	return g_dbus_create_error(msg,
-				ERROR_INTERFACE ".ConnectionAttemptFailed",
-				err ? err : "Connection attempt failed");
 }
 
 static gboolean bnep_watchdog_cb(GIOChannel *chan, GIOCondition cond,
@@ -157,7 +123,7 @@ static gboolean bnep_watchdog_cb(GIOChannel *chan, GIOCondition cond,
 					NETWORK_PEER_INTERFACE, "Connected",
 					DBUS_TYPE_BOOLEAN, &connected);
 		emit_property_changed(connection, nc->peer->path,
-					NETWORK_PEER_INTERFACE, "Device",
+					NETWORK_PEER_INTERFACE, "Interface",
 					DBUS_TYPE_STRING, &property);
 		emit_property_changed(connection, nc->peer->path,
 					NETWORK_PEER_INTERFACE, "UUID",
@@ -174,8 +140,8 @@ static gboolean bnep_watchdog_cb(GIOChannel *chan, GIOCondition cond,
 
 	bnep_if_down(nc->dev);
 	nc->state = DISCONNECTED;
-	memset(nc->dev, 0, 16);
-	strncpy(nc->dev, prefix, sizeof(nc->dev) - 1);
+	memset(nc->dev, 0, sizeof(nc->dev));
+	strcpy(nc->dev, "bnep%d");
 
 	return FALSE;
 }
@@ -184,13 +150,18 @@ static void cancel_connection(struct network_conn *nc, const char *err_msg)
 {
 	DBusMessage *reply;
 
+	if (nc->timeout_source > 0) {
+		g_source_remove(nc->timeout_source);
+		nc->timeout_source = 0;
+	}
+
 	if (nc->watch) {
 		g_dbus_remove_watch(connection, nc->watch);
 		nc->watch = 0;
 	}
 
 	if (nc->msg && err_msg) {
-		reply = connection_attempt_failed(nc->msg, err_msg);
+		reply = btd_error_failed(nc->msg, err_msg);
 		g_dbus_send_message(connection, reply);
 	}
 
@@ -229,7 +200,7 @@ static gboolean bnep_setup_cb(GIOChannel *chan, GIOCondition cond,
 	struct bnep_control_rsp *rsp;
 	struct timeval timeo;
 	char pkt[BNEP_MTU];
-	gsize r;
+	ssize_t r;
 	int sk;
 	const char *pdev, *uuid;
 	gboolean connected;
@@ -237,26 +208,31 @@ static gboolean bnep_setup_cb(GIOChannel *chan, GIOCondition cond,
 	if (cond & G_IO_NVAL)
 		return FALSE;
 
+	g_source_remove(nc->timeout_source);
+	nc->timeout_source = 0;
+
 	if (cond & (G_IO_HUP | G_IO_ERR)) {
 		error("Hangup or error on l2cap server socket");
 		goto failed;
 	}
 
+	sk = g_io_channel_unix_get_fd(chan);
+
 	memset(pkt, 0, BNEP_MTU);
-	if (g_io_channel_read(chan, pkt, sizeof(pkt) - 1,
-				&r) != G_IO_ERROR_NONE) {
+	r = read(sk, pkt, sizeof(pkt) -1);
+	if (r < 0) {
 		error("IO Channel read error");
 		goto failed;
 	}
 
-	if (r <= 0) {
+	if (r == 0) {
 		error("No packet received on l2cap socket");
 		goto failed;
 	}
 
 	errno = EPROTO;
 
-	if (r < sizeof(*rsp)) {
+	if ((size_t) r < sizeof(*rsp)) {
 		error("Packet received is not bnep type");
 		goto failed;
 	}
@@ -277,8 +253,6 @@ static gboolean bnep_setup_cb(GIOChannel *chan, GIOCondition cond,
 		goto failed;
 	}
 
-	sk = g_io_channel_unix_get_fd(chan);
-
 	memset(&timeo, 0, sizeof(timeo));
 	timeo.tv_sec = 0;
 
@@ -289,7 +263,7 @@ static gboolean bnep_setup_cb(GIOChannel *chan, GIOCondition cond,
 		goto failed;
 	}
 
-	bnep_if_up(nc->dev, nc->id);
+	bnep_if_up(nc->dev);
 	pdev = nc->dev;
 	uuid = bnep_uuid(nc->id);
 
@@ -302,7 +276,7 @@ static gboolean bnep_setup_cb(GIOChannel *chan, GIOCondition cond,
 				NETWORK_PEER_INTERFACE, "Connected",
 				DBUS_TYPE_BOOLEAN, &connected);
 	emit_property_changed(connection, nc->peer->path,
-				NETWORK_PEER_INTERFACE, "Device",
+				NETWORK_PEER_INTERFACE, "Interface",
 				DBUS_TYPE_STRING, &pdev);
 	emit_property_changed(connection, nc->peer->path,
 				NETWORK_PEER_INTERFACE, "UUID",
@@ -327,11 +301,10 @@ failed:
 	return FALSE;
 }
 
-static int bnep_connect(struct network_conn *nc)
+static int bnep_send_conn_req(struct network_conn *nc)
 {
 	struct bnep_setup_conn_req *req;
 	struct __service_16 *s;
-	struct timeval timeo;
 	unsigned char pkt[BNEP_MTU];
 	int fd;
 
@@ -344,14 +317,46 @@ static int bnep_connect(struct network_conn *nc)
 	s->dst = htons(nc->id);
 	s->src = htons(BNEP_SVC_PANU);
 
-	memset(&timeo, 0, sizeof(timeo));
-	timeo.tv_sec = 30;
-
 	fd = g_io_channel_unix_get_fd(nc->io);
-	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeo, sizeof(timeo));
+	if (write(fd, pkt, sizeof(*req) + sizeof(*s)) < 0) {
+		int err = -errno;
+		error("bnep connection req send failed: %s", strerror(errno));
+		return err;
+	}
 
-	if (send(fd, pkt, sizeof(*req) + sizeof(*s), 0) < 0)
-		return -errno;
+	nc->attempt_cnt++;
+
+	return 0;
+}
+
+static gboolean bnep_conn_req_to(gpointer user_data)
+{
+	struct network_conn *nc;
+
+	nc = user_data;
+	if (nc->attempt_cnt == CON_SETUP_RETRIES) {
+		error("Too many bnep connection attempts");
+	} else {
+		error("bnep connection setup TO, retrying...");
+		if (!bnep_send_conn_req(nc))
+			return TRUE;
+	}
+
+	cancel_connection(nc, "bnep setup failed");
+
+	return FALSE;
+}
+
+static int bnep_connect(struct network_conn *nc)
+{
+	int err;
+
+	nc->attempt_cnt = 0;
+	if ((err = bnep_send_conn_req(nc)))
+		return err;
+
+	nc->timeout_source = g_timeout_add_seconds(CON_SETUP_TO,
+							bnep_conn_req_to, nc);
 
 	g_io_add_watch(nc->io, G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
 			(GIOFunc) bnep_setup_cb, nc);
@@ -401,23 +406,24 @@ static DBusMessage *connection_connect(DBusConnection *conn,
 	id = bnep_service_id(svc);
 	nc = find_connection(peer->connections, id);
 	if (!nc)
-		return not_supported(msg);
+		return btd_error_not_supported(msg);
 
 	if (nc->state != DISCONNECTED)
-		return already_connected(msg);
+		return btd_error_already_connected(msg);
 
 	nc->io = bt_io_connect(BT_IO_L2CAP, connect_cb, nc,
 				NULL, &err,
 				BT_IO_OPT_SOURCE_BDADDR, &peer->src,
 				BT_IO_OPT_DEST_BDADDR, &peer->dst,
 				BT_IO_OPT_PSM, BNEP_PSM,
+				BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_MEDIUM,
 				BT_IO_OPT_OMTU, BNEP_MTU,
 				BT_IO_OPT_IMTU, BNEP_MTU,
 				BT_IO_OPT_INVALID);
 	if (!nc->io) {
 		DBusMessage *reply;
 		error("%s", err->message);
-		reply = connection_attempt_failed(msg, err->message);
+		reply = btd_error_failed(msg, err->message);
 		g_error_free(err);
 		return reply;
 	}
@@ -440,7 +446,7 @@ static DBusMessage *connection_cancel(DBusConnection *conn,
 	const char *caller = dbus_message_get_sender(msg);
 
 	if (!g_str_equal(owner, caller))
-		return not_permited(msg);
+		return btd_error_not_authorized(msg);
 
 	connection_destroy(conn, nc);
 
@@ -462,7 +468,7 @@ static DBusMessage *connection_disconnect(DBusConnection *conn,
 		return connection_cancel(conn, msg, nc);
 	}
 
-	return not_connected(msg);
+	return btd_error_not_connected(msg);
 }
 
 static DBusMessage *connection_get_properties(DBusConnection *conn,
@@ -502,9 +508,9 @@ static DBusMessage *connection_get_properties(DBusConnection *conn,
 	connected = nc ? TRUE : FALSE;
 	dict_append_entry(&dict, "Connected", DBUS_TYPE_BOOLEAN, &connected);
 
-	/* Device */
+	/* Interface */
 	property = nc ? nc->dev : "";
-	dict_append_entry(&dict, "Device", DBUS_TYPE_STRING, &property);
+	dict_append_entry(&dict, "Interface", DBUS_TYPE_STRING, &property);
 
 	/* UUID */
 	property = nc ? bnep_uuid(nc->id) : "";
@@ -515,8 +521,10 @@ static DBusMessage *connection_get_properties(DBusConnection *conn,
 	return reply;
 }
 
-static void connection_free(struct network_conn *nc)
+static void connection_free(void *data)
 {
+	struct network_conn *nc = data;
+
 	if (nc->dc_id)
 		device_remove_disconnect_watch(nc->peer->device, nc->dc_id);
 
@@ -528,8 +536,7 @@ static void connection_free(struct network_conn *nc)
 
 static void peer_free(struct network_peer *peer)
 {
-	g_slist_foreach(peer->connections, (GFunc) connection_free, NULL);
-	g_slist_free(peer->connections);
+	g_slist_free_full(peer->connections, connection_free);
 	btd_device_unref(peer->device);
 	g_free(peer->path);
 	g_free(peer);
@@ -539,7 +546,7 @@ static void path_unregister(void *data)
 {
 	struct network_peer *peer = data;
 
-	debug("Unregistered interface %s on path %s",
+	DBG("Unregistered interface %s on path %s",
 		NETWORK_PEER_INTERFACE, peer->path);
 
 	peers = g_slist_remove(peers, peer);
@@ -603,7 +610,7 @@ static struct network_peer *create_peer(struct btd_device *device,
 		return NULL;
 	}
 
-	debug("Registered interface %s on path %s",
+	DBG("Registered interface %s on path %s",
 		NETWORK_PEER_INTERFACE, path);
 
 	return peer;
@@ -632,8 +639,8 @@ int connection_register(struct btd_device *device, const char *path,
 
 	nc = g_new0(struct network_conn, 1);
 	nc->id = id;
-	memset(nc->dev, 0, 16);
-	strncpy(nc->dev, prefix, sizeof(nc->dev) - 1);
+	memset(nc->dev, 0, sizeof(nc->dev));
+	strcpy(nc->dev, "bnep%d");
 	nc->state = DISCONNECTED;
 	nc->peer = peer;
 
@@ -642,17 +649,15 @@ int connection_register(struct btd_device *device, const char *path,
 	return 0;
 }
 
-int connection_init(DBusConnection *conn, const char *iface_prefix)
+int connection_init(DBusConnection *conn)
 {
 	connection = dbus_connection_ref(conn);
-	prefix = iface_prefix;
 
 	return 0;
 }
 
-void connection_exit()
+void connection_exit(void)
 {
 	dbus_connection_unref(connection);
 	connection = NULL;
-	prefix = NULL;
 }

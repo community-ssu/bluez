@@ -35,9 +35,9 @@
 
 #include <glib.h>
 
-#include "logging.h"
-#include "manager.h"
+#include "log.h"
 #include "adapter.h"
+#include "manager.h"
 #include "hcid.h"
 
 enum rfkill_type {
@@ -71,18 +71,19 @@ static gboolean rfkill_event(GIOChannel *chan,
 	struct rfkill_event *event = (void *) buf;
 	struct btd_adapter *adapter;
 	char sysname[PATH_MAX];
-	gsize len;
-	GIOError err;
+	ssize_t len;
 	int fd, id;
 
 	if (cond & (G_IO_NVAL | G_IO_HUP | G_IO_ERR))
 		return FALSE;
 
+	fd = g_io_channel_unix_get_fd(chan);
+
 	memset(buf, 0, sizeof(buf));
 
-	err = g_io_channel_read(chan, (gchar *) buf, sizeof(buf), &len);
-	if (err) {
-		if (err == G_IO_ERROR_AGAIN)
+	len = read(fd, buf, sizeof(buf));
+	if (len < 0) {
+		if (errno == EAGAIN)
 			return TRUE;
 		return FALSE;
 	}
@@ -90,7 +91,7 @@ static gboolean rfkill_event(GIOChannel *chan,
 	if (len != sizeof(struct rfkill_event))
 		return TRUE;
 
-	debug("RFKILL event idx %u type %u op %u soft %u hard %u",
+	DBG("RFKILL event idx %u type %u op %u soft %u hard %u",
 					event->idx, event->type, event->op,
 						event->soft, event->hard);
 
@@ -131,7 +132,7 @@ static gboolean rfkill_event(GIOChannel *chan,
 	if (!adapter)
 		return TRUE;
 
-	debug("RFKILL unblock for hci%d", id);
+	DBG("RFKILL unblock for hci%d", id);
 
 	btd_adapter_restore_powered(adapter);
 

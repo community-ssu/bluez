@@ -47,7 +47,7 @@ extern "C" {
 #define HCI_DEV_SUSPEND	5
 #define HCI_DEV_RESUME	6
 
-/* HCI device types */
+/* HCI bus types */
 #define HCI_VIRTUAL	0
 #define HCI_USB		1
 #define HCI_PCCARD	2
@@ -55,6 +55,10 @@ extern "C" {
 #define HCI_RS232	4
 #define HCI_PCI		5
 #define HCI_SDIO	6
+
+/* HCI controller types */
+#define HCI_BREDR	0x00
+#define HCI_AMP		0x01
 
 /* HCI device flags */
 enum {
@@ -69,6 +73,12 @@ enum {
 	HCI_INQUIRY,
 
 	HCI_RAW,
+};
+
+/* LE address type */
+enum {
+	LE_PUBLIC_ADDRESS = 0x00,
+	LE_RANDOM_ADDRESS = 0x01
 };
 
 /* HCI ioctl defines */
@@ -92,6 +102,9 @@ enum {
 #define HCISETLINKMODE	_IOW('H', 226, int)
 #define HCISETACLMTU	_IOW('H', 227, int)
 #define HCISETSCOMTU	_IOW('H', 228, int)
+
+#define HCIBLOCKADDR	_IOW('H', 230, int)
+#define HCIUNBLOCKADDR	_IOW('H', 231, int)
 
 #define HCIINQUIRY	_IOR('H', 240, int)
 
@@ -189,6 +202,7 @@ enum {
 #define HCI_HOST_BUSY_PAIRING			0x38
 
 /* ACL flags */
+#define ACL_START_NO_FLUSH	0x00
 #define ACL_CONT		0x01
 #define ACL_START		0x02
 #define ACL_ACTIVE_BCAST	0x04
@@ -261,6 +275,11 @@ enum {
 #define LMP_EPC		0x04
 #define LMP_EXT_FEAT	0x80
 
+/* Extended LMP features */
+#define LMP_HOST_SSP		0x01
+#define LMP_HOST_LE		0x02
+#define LMP_HOST_LE_BREDR	0x04
+
 /* Link policies */
 #define HCI_LP_RSWITCH	0x0001
 #define HCI_LP_HOLD	0x0002
@@ -275,6 +294,16 @@ enum {
 #define HCI_LM_TRUSTED	0x0008
 #define HCI_LM_RELIABLE	0x0010
 #define HCI_LM_SECURE	0x0020
+
+/* Link Key types */
+#define HCI_LK_COMBINATION		0x00
+#define HCI_LK_LOCAL_UNIT		0x01
+#define HCI_LK_REMOTE_UNIT		0x02
+#define HCI_LK_DEBUG_COMBINATION	0x03
+#define HCI_LK_UNAUTH_COMBINATION	0x04
+#define HCI_LK_AUTH_COMBINATION		0x05
+#define HCI_LK_CHANGED_COMBINATION	0x06
+#define HCI_LK_INVALID			0xFF
 
 /* -----  HCI Commands ----- */
 
@@ -521,6 +550,55 @@ typedef struct {
 } __attribute__ ((packed)) io_capability_neg_reply_cp;
 #define IO_CAPABILITY_NEG_REPLY_CP_SIZE 7
 
+#define OCF_CREATE_PHYSICAL_LINK		0x0035
+typedef struct {
+	uint8_t		handle;
+	uint8_t		key_length;
+	uint8_t		key_type;
+	uint8_t		key[32];
+} __attribute__ ((packed)) create_physical_link_cp;
+#define CREATE_PHYSICAL_LINK_CP_SIZE 35
+
+#define OCF_ACCEPT_PHYSICAL_LINK		0x0036
+
+#define OCF_DISCONNECT_PHYSICAL_LINK		0x0037
+typedef struct {
+	uint8_t		handle;
+	uint8_t		reason;
+} __attribute__ ((packed)) disconnect_physical_link_cp;
+#define DISCONNECT_PHYSICAL_LINK_CP_SIZE 2
+
+#define OCF_CREATE_LOGICAL_LINK		0x0038
+typedef struct {
+	uint8_t		handle;
+	uint8_t		tx_flow[16];
+	uint8_t		rx_flow[16];
+} __attribute__ ((packed)) create_logical_link_cp;
+#define CREATE_LOGICAL_LINK_CP_SIZE 33
+
+#define OCF_ACCEPT_LOGICAL_LINK		0x0039
+
+#define OCF_DISCONNECT_LOGICAL_LINK		0x003A
+typedef struct {
+	uint16_t	handle;
+} __attribute__ ((packed)) disconnect_logical_link_cp;
+#define DISCONNECT_LOGICAL_LINK_CP_SIZE 2
+
+#define OCF_LOGICAL_LINK_CANCEL		0x003B
+typedef struct {
+	uint8_t		handle;
+	uint8_t		tx_flow_id;
+} __attribute__ ((packed)) cancel_logical_link_cp;
+#define LOGICAL_LINK_CANCEL_CP_SIZE 2
+typedef struct {
+	uint8_t		status;
+	uint8_t		handle;
+	uint8_t		tx_flow_id;
+} __attribute__ ((packed)) cancel_logical_link_rp;
+#define LOGICAL_LINK_CANCEL_RP_SIZE 3
+
+#define OCF_FLOW_SPEC_MODIFY		0x003C
+
 /* Link Policy */
 #define OGF_LINK_POLICY		0x02
 
@@ -725,18 +803,20 @@ typedef struct {
 } __attribute__ ((packed)) delete_stored_link_key_rp;
 #define DELETE_STORED_LINK_KEY_RP_SIZE 3
 
+#define HCI_MAX_NAME_LENGTH		248
+
 #define OCF_CHANGE_LOCAL_NAME		0x0013
 typedef struct {
-	uint8_t		name[248];
+	uint8_t		name[HCI_MAX_NAME_LENGTH];
 } __attribute__ ((packed)) change_local_name_cp;
-#define CHANGE_LOCAL_NAME_CP_SIZE 248 
+#define CHANGE_LOCAL_NAME_CP_SIZE 248
 
 #define OCF_READ_LOCAL_NAME		0x0014
 typedef struct {
 	uint8_t		status;
-	uint8_t		name[248];
+	uint8_t		name[HCI_MAX_NAME_LENGTH];
 } __attribute__ ((packed)) read_local_name_rp;
-#define READ_LOCAL_NAME_RP_SIZE 249 
+#define READ_LOCAL_NAME_RP_SIZE 249
 
 #define OCF_READ_CONN_ACCEPT_TIMEOUT	0x0015
 typedef struct {
@@ -824,7 +904,7 @@ typedef struct {
 	uint8_t		status;
 	uint8_t		dev_class[3];
 } __attribute__ ((packed)) read_class_of_dev_rp;
-#define READ_CLASS_OF_DEV_RP_SIZE 4 
+#define READ_CLASS_OF_DEV_RP_SIZE 4
 
 #define OCF_WRITE_CLASS_OF_DEV		0x0024
 typedef struct {
@@ -985,6 +1065,8 @@ typedef struct {
 #define OCF_READ_PAGE_SCAN_TYPE		0x0046
 
 #define OCF_WRITE_PAGE_SCAN_TYPE	0x0047
+	#define PAGE_SCAN_TYPE_STANDARD		0x00
+	#define PAGE_SCAN_TYPE_INTERLACED	0x01
 
 #define OCF_READ_AFH_MODE		0x0048
 typedef struct {
@@ -1003,18 +1085,20 @@ typedef struct {
 } __attribute__ ((packed)) write_afh_mode_rp;
 #define WRITE_AFH_MODE_RP_SIZE 1
 
+#define HCI_MAX_EIR_LENGTH		240
+
 #define OCF_READ_EXT_INQUIRY_RESPONSE	0x0051
 typedef struct {
 	uint8_t		status;
 	uint8_t		fec;
-	uint8_t		data[240];
+	uint8_t		data[HCI_MAX_EIR_LENGTH];
 } __attribute__ ((packed)) read_ext_inquiry_response_rp;
 #define READ_EXT_INQUIRY_RESPONSE_RP_SIZE 242
 
 #define OCF_WRITE_EXT_INQUIRY_RESPONSE	0x0052
 typedef struct {
 	uint8_t		fec;
-	uint8_t		data[240];
+	uint8_t		data[HCI_MAX_EIR_LENGTH];
 } __attribute__ ((packed)) write_ext_inquiry_response_cp;
 #define WRITE_EXT_INQUIRY_RESPONSE_CP_SIZE 241
 typedef struct {
@@ -1056,6 +1140,13 @@ typedef struct {
 	uint8_t		randomizer[16];
 } __attribute__ ((packed)) read_local_oob_data_rp;
 #define READ_LOCAL_OOB_DATA_RP_SIZE 33
+
+#define OCF_READ_INQ_RESPONSE_TX_POWER_LEVEL	0x0058
+typedef struct {
+	uint8_t		status;
+	int8_t		level;
+} __attribute__ ((packed)) read_inq_response_tx_power_level_rp;
+#define READ_INQ_RESPONSE_TX_POWER_LEVEL_RP_SIZE 2
 
 #define OCF_READ_INQUIRY_TRANSMIT_POWER_LEVEL	0x0058
 typedef struct {
@@ -1108,6 +1199,72 @@ typedef struct {
 	uint8_t		status;
 } __attribute__ ((packed)) send_keypress_notify_rp;
 #define SEND_KEYPRESS_NOTIFY_RP_SIZE 1
+
+#define OCF_READ_LOGICAL_LINK_ACCEPT_TIMEOUT	 0x0061
+typedef struct {
+	uint8_t		status;
+	uint16_t	timeout;
+} __attribute__ ((packed)) read_log_link_accept_timeout_rp;
+#define READ_LOGICAL_LINK_ACCEPT_TIMEOUT_RP_SIZE 3
+
+#define OCF_WRITE_LOGICAL_LINK_ACCEPT_TIMEOUT	0x0062
+typedef struct {
+	uint16_t	timeout;
+} __attribute__ ((packed)) write_log_link_accept_timeout_cp;
+#define WRITE_LOGICAL_LINK_ACCEPT_TIMEOUT_CP_SIZE 2
+
+#define OCF_SET_EVENT_MASK_PAGE_2	0x0063
+
+#define OCF_READ_LOCATION_DATA		0x0064
+
+#define OCF_WRITE_LOCATION_DATA	0x0065
+
+#define OCF_READ_FLOW_CONTROL_MODE	0x0066
+
+#define OCF_WRITE_FLOW_CONTROL_MODE	0x0067
+
+#define OCF_READ_ENHANCED_TRANSMIT_POWER_LEVEL	0x0068
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+	int8_t		level_gfsk;
+	int8_t		level_dqpsk;
+	int8_t		level_8dpsk;
+} __attribute__ ((packed)) read_enhanced_transmit_power_level_rp;
+#define READ_ENHANCED_TRANSMIT_POWER_LEVEL_RP_SIZE 6
+
+#define OCF_READ_BEST_EFFORT_FLUSH_TIMEOUT	0x0069
+typedef struct {
+	uint8_t		status;
+	uint32_t	timeout;
+} __attribute__ ((packed)) read_best_effort_flush_timeout_rp;
+#define READ_BEST_EFFORT_FLUSH_TIMEOUT_RP_SIZE 5
+
+#define OCF_WRITE_BEST_EFFORT_FLUSH_TIMEOUT	0x006A
+typedef struct {
+	uint16_t	handle;
+	uint32_t	timeout;
+} __attribute__ ((packed)) write_best_effort_flush_timeout_cp;
+#define WRITE_BEST_EFFORT_FLUSH_TIMEOUT_CP_SIZE 6
+typedef struct {
+	uint8_t		status;
+} __attribute__ ((packed)) write_best_effort_flush_timeout_rp;
+#define WRITE_BEST_EFFORT_FLUSH_TIMEOUT_RP_SIZE 1
+
+#define OCF_READ_LE_HOST_SUPPORTED	0x006C
+typedef struct {
+	uint8_t		status;
+	uint8_t		le;
+	uint8_t		simul;
+} __attribute__ ((packed)) read_le_host_supported_rp;
+#define READ_LE_HOST_SUPPORTED_RP_SIZE 3
+
+#define OCF_WRITE_LE_HOST_SUPPORTED	0x006D
+typedef struct {
+	uint8_t		le;
+	uint8_t		simul;
+} __attribute__ ((packed)) write_le_host_supported_cp;
+#define WRITE_LE_HOST_SUPPORTED_CP_SIZE 2
 
 /* Informational Parameters */
 #define OGF_INFO_PARAM		0x04
@@ -1226,6 +1383,50 @@ typedef struct {
 } __attribute__ ((packed)) read_clock_rp;
 #define READ_CLOCK_RP_SIZE 9
 
+#define OCF_READ_LOCAL_AMP_INFO	0x0009
+typedef struct {
+	uint8_t		status;
+	uint8_t		amp_status;
+	uint32_t	total_bandwidth;
+	uint32_t	max_guaranteed_bandwidth;
+	uint32_t	min_latency;
+	uint32_t	max_pdu_size;
+	uint8_t		controller_type;
+	uint16_t	pal_caps;
+	uint16_t	max_amp_assoc_length;
+	uint32_t	max_flush_timeout;
+	uint32_t	best_effort_flush_timeout;
+} __attribute__ ((packed)) read_local_amp_info_rp;
+#define READ_LOCAL_AMP_INFO_RP_SIZE 31
+
+#define OCF_READ_LOCAL_AMP_ASSOC	0x000A
+typedef struct {
+	uint8_t		handle;
+	uint16_t	len_so_far;
+	uint16_t	max_len;
+} __attribute__ ((packed)) read_local_amp_assoc_cp;
+
+typedef struct {
+	uint8_t		status;
+	uint8_t		handle;
+	uint16_t	rem_len;
+	uint8_t		frag[0];
+} __attribute__ ((packed)) read_local_amp_assoc_rp;
+
+#define OCF_WRITE_REMOTE_AMP_ASSOC	0x000B
+typedef struct {
+	uint8_t		handle;
+	uint16_t	length_so_far;
+	uint16_t	assoc_length;
+	uint8_t		fragment[HCI_MAX_NAME_LENGTH];
+} __attribute__ ((packed)) write_remote_amp_assoc_cp;
+#define WRITE_REMOTE_AMP_ASSOC_CP_SIZE 253
+typedef struct {
+	uint8_t		status;
+	uint8_t		handle;
+} __attribute__ ((packed)) write_remote_amp_assoc_rp;
+#define WRITE_REMOTE_AMP_ASSOC_RP_SIZE 2
+
 /* Testing commands */
 #define OGF_TESTING_CMD		0x3e
 
@@ -1244,6 +1445,250 @@ typedef struct {
 	uint8_t		status;
 } __attribute__ ((packed)) write_simple_pairing_debug_mode_rp;
 #define WRITE_SIMPLE_PAIRING_DEBUG_MODE_RP_SIZE 1
+
+/* LE commands */
+#define OGF_LE_CTL		0x08
+
+#define OCF_LE_SET_EVENT_MASK			0x0001
+typedef struct {
+	uint8_t		mask[8];
+} __attribute__ ((packed)) le_set_event_mask_cp;
+#define LE_SET_EVENT_MASK_CP_SIZE 8
+
+#define OCF_LE_READ_BUFFER_SIZE			0x0002
+typedef struct {
+	uint8_t		status;
+	uint16_t	pkt_len;
+	uint8_t		max_pkt;
+} __attribute__ ((packed)) le_read_buffer_size_rp;
+#define LE_READ_BUFFER_SIZE_RP_SIZE 4
+
+#define OCF_LE_READ_LOCAL_SUPPORTED_FEATURES	0x0003
+typedef struct {
+	uint8_t		status;
+	uint8_t		features[8];
+} __attribute__ ((packed)) le_read_local_supported_features_rp;
+#define LE_READ_LOCAL_SUPPORTED_FEATURES_RP_SIZE 9
+
+#define OCF_LE_SET_RANDOM_ADDRESS		0x0005
+typedef struct {
+	bdaddr_t	bdaddr;
+} __attribute__ ((packed)) le_set_random_address_cp;
+#define LE_SET_RANDOM_ADDRESS_CP_SIZE 6
+
+#define OCF_LE_SET_ADVERTISING_PARAMETERS	0x0006
+typedef struct {
+	uint16_t	min_interval;
+	uint16_t	max_interval;
+	uint8_t		advtype;
+	uint8_t		own_bdaddr_type;
+	uint8_t		direct_bdaddr_type;
+	bdaddr_t	direct_bdaddr;
+	uint8_t		chan_map;
+	uint8_t		filter;
+} __attribute__ ((packed)) le_set_advertising_parameters_cp;
+#define LE_SET_ADVERTISING_PARAMETERS_CP_SIZE 15
+
+#define OCF_LE_READ_ADVERTISING_CHANNEL_TX_POWER	0x0007
+typedef struct {
+	uint8_t		status;
+	uint8_t		level;
+} __attribute__ ((packed)) le_read_advertising_channel_tx_power_rp;
+#define LE_READ_ADVERTISING_CHANNEL_TX_POWER_RP_SIZE 2
+
+#define OCF_LE_SET_ADVERTISING_DATA		0x0008
+typedef struct {
+	uint8_t		length;
+	uint8_t		data[31];
+} __attribute__ ((packed)) le_set_advertising_data_cp;
+#define LE_SET_ADVERTISING_DATA_CP_SIZE 32
+
+#define OCF_LE_SET_SCAN_RESPONSE_DATA		0x0009
+typedef struct {
+	uint8_t		length;
+	uint8_t		data[31];
+} __attribute__ ((packed)) le_set_scan_response_data_cp;
+#define LE_SET_SCAN_RESPONSE_DATA_CP_SIZE 32
+
+#define OCF_LE_SET_ADVERTISE_ENABLE		0x000A
+typedef struct {
+	uint8_t		enable;
+} __attribute__ ((packed)) le_set_advertise_enable_cp;
+#define LE_SET_ADVERTISE_ENABLE_CP_SIZE 1
+
+#define OCF_LE_SET_SCAN_PARAMETERS		0x000B
+typedef struct {
+	uint8_t		type;
+	uint16_t	interval;
+	uint16_t	window;
+	uint8_t		own_bdaddr_type;
+	uint8_t		filter;
+} __attribute__ ((packed)) le_set_scan_parameters_cp;
+#define LE_SET_SCAN_PARAMETERS_CP_SIZE 7
+
+#define OCF_LE_SET_SCAN_ENABLE			0x000C
+typedef struct {
+	uint8_t		enable;
+	uint8_t		filter_dup;
+} __attribute__ ((packed)) le_set_scan_enable_cp;
+#define LE_SET_SCAN_ENABLE_CP_SIZE 2
+
+#define OCF_LE_CREATE_CONN			0x000D
+typedef struct {
+	uint16_t	interval;
+	uint16_t	window;
+	uint8_t		initiator_filter;
+	uint8_t		peer_bdaddr_type;
+	bdaddr_t	peer_bdaddr;
+	uint8_t		own_bdaddr_type;
+	uint16_t	min_interval;
+	uint16_t	max_interval;
+	uint16_t	latency;
+	uint16_t	supervision_timeout;
+	uint16_t	min_ce_length;
+	uint16_t	max_ce_length;
+} __attribute__ ((packed)) le_create_connection_cp;
+#define LE_CREATE_CONN_CP_SIZE 25
+
+#define OCF_LE_CREATE_CONN_CANCEL		0x000E
+
+#define OCF_LE_READ_WHITE_LIST_SIZE		0x000F
+typedef struct {
+	uint8_t		status;
+	uint8_t		size;
+} __attribute__ ((packed)) le_read_white_list_size_rp;
+#define LE_READ_WHITE_LIST_SIZE_RP_SIZE 2
+
+#define OCF_LE_CLEAR_WHITE_LIST			0x0010
+
+#define OCF_LE_ADD_DEVICE_TO_WHITE_LIST		0x0011
+typedef struct {
+	uint8_t		bdaddr_type;
+	bdaddr_t	bdaddr;
+} __attribute__ ((packed)) le_add_device_to_white_list_cp;
+#define LE_ADD_DEVICE_TO_WHITE_LIST_CP_SIZE 7
+
+#define OCF_LE_REMOVE_DEVICE_FROM_WHITE_LIST	0x0012
+typedef struct {
+	uint8_t		bdaddr_type;
+	bdaddr_t	bdaddr;
+} __attribute__ ((packed)) le_remove_device_from_white_list_cp;
+#define LE_REMOVE_DEVICE_FROM_WHITE_LIST_CP_SIZE 7
+
+#define OCF_LE_CONN_UPDATE			0x0013
+typedef struct {
+	uint16_t	handle;
+	uint16_t	min_interval;
+	uint16_t	max_interval;
+	uint16_t	latency;
+	uint16_t	supervision_timeout;
+	uint16_t	min_ce_length;
+	uint16_t	max_ce_length;
+} __attribute__ ((packed)) le_connection_update_cp;
+#define LE_CONN_UPDATE_CP_SIZE 14
+
+#define OCF_LE_SET_HOST_CHANNEL_CLASSIFICATION	0x0014
+typedef struct {
+	uint8_t		map[5];
+} __attribute__ ((packed)) le_set_host_channel_classification_cp;
+#define LE_SET_HOST_CHANNEL_CLASSIFICATION_CP_SIZE 5
+
+#define OCF_LE_READ_CHANNEL_MAP			0x0015
+typedef struct {
+	uint16_t	handle;
+} __attribute__ ((packed)) le_read_channel_map_cp;
+#define LE_READ_CHANNEL_MAP_CP_SIZE 2
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+	uint8_t		map[5];
+} __attribute__ ((packed)) le_read_channel_map_rp;
+#define LE_READ_CHANNEL_MAP_RP_SIZE 8
+
+#define OCF_LE_READ_REMOTE_USED_FEATURES	0x0016
+typedef struct {
+	uint16_t	handle;
+} __attribute__ ((packed)) le_read_remote_used_features_cp;
+#define LE_READ_REMOTE_USED_FEATURES_CP_SIZE 2
+
+#define OCF_LE_ENCRYPT				0x0017
+typedef struct {
+	uint8_t		key[16];
+	uint8_t		plaintext[16];
+} __attribute__ ((packed)) le_encrypt_cp;
+#define LE_ENCRYPT_CP_SIZE 32
+typedef struct {
+	uint8_t		status;
+	uint8_t		data[16];
+} __attribute__ ((packed)) le_encrypt_rp;
+#define LE_ENCRYPT_RP_SIZE 17
+
+#define OCF_LE_RAND				0x0018
+typedef struct {
+	uint8_t		status;
+	uint64_t	random;
+} __attribute__ ((packed)) le_rand_rp;
+#define LE_RAND_RP_SIZE 9
+
+#define OCF_LE_START_ENCRYPTION			0x0019
+typedef struct {
+	uint16_t	handle;
+	uint64_t	random;
+	uint16_t	diversifier;
+	uint8_t		key[16];
+} __attribute__ ((packed)) le_start_encryption_cp;
+#define LE_START_ENCRYPTION_CP_SIZE 28
+
+#define OCF_LE_LTK_REPLY			0x001A
+typedef struct {
+	uint16_t	handle;
+	uint8_t		key[16];
+} __attribute__ ((packed)) le_ltk_reply_cp;
+#define LE_LTK_REPLY_CP_SIZE 18
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+} __attribute__ ((packed)) le_ltk_reply_rp;
+#define LE_LTK_REPLY_RP_SIZE 3
+
+#define OCF_LE_LTK_NEG_REPLY			0x001B
+typedef struct {
+	uint16_t	handle;
+} __attribute__ ((packed)) le_ltk_neg_reply_cp;
+#define LE_LTK_NEG_REPLY_CP_SIZE 2
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+} __attribute__ ((packed)) le_ltk_neg_reply_rp;
+#define LE_LTK_NEG_REPLY_RP_SIZE 3
+
+#define OCF_LE_READ_SUPPORTED_STATES		0x001C
+typedef struct {
+	uint8_t		status;
+	uint64_t	states;
+} __attribute__ ((packed)) le_read_supported_states_rp;
+#define LE_READ_SUPPORTED_STATES_RP_SIZE 9
+
+#define OCF_LE_RECEIVER_TEST			0x001D
+typedef struct {
+	uint8_t		frequency;
+} __attribute__ ((packed)) le_receiver_test_cp;
+#define LE_RECEIVER_TEST_CP_SIZE 1
+
+#define OCF_LE_TRANSMITTER_TEST			0x001E
+typedef struct {
+	uint8_t		frequency;
+	uint8_t		length;
+	uint8_t		payload;
+} __attribute__ ((packed)) le_transmitter_test_cp;
+#define LE_TRANSMITTER_TEST_CP_SIZE 3
+
+#define OCF_LE_TEST_END				0x001F
+typedef struct {
+	uint8_t		status;
+	uint16_t	num_pkts;
+} __attribute__ ((packed)) le_test_end_rp;
+#define LE_TEST_END_RP_SIZE 3
 
 /* Vendor specific commands */
 #define OGF_VENDOR_CMD		0x3f
@@ -1300,7 +1745,7 @@ typedef struct {
 typedef struct {
 	uint8_t		status;
 	bdaddr_t	bdaddr;
-	uint8_t		name[248];
+	uint8_t		name[HCI_MAX_NAME_LENGTH];
 } __attribute__ ((packed)) evt_remote_name_req_complete;
 #define EVT_REMOTE_NAME_REQ_COMPLETE_SIZE 255
 
@@ -1561,7 +2006,7 @@ typedef struct {
 	uint8_t		dev_class[3];
 	uint16_t	clock_offset;
 	int8_t		rssi;
-	uint8_t		data[240];
+	uint8_t		data[HCI_MAX_EIR_LENGTH];
 } __attribute__ ((packed)) extended_inquiry_info;
 #define EXTENDED_INQUIRY_INFO_SIZE 254
 
@@ -1647,6 +2092,120 @@ typedef struct {
 } __attribute__ ((packed)) evt_remote_host_features_notify;
 #define EVT_REMOTE_HOST_FEATURES_NOTIFY_SIZE 14
 
+#define EVT_LE_META_EVENT	0x3E
+typedef struct {
+	uint8_t		subevent;
+	uint8_t		data[0];
+} __attribute__ ((packed)) evt_le_meta_event;
+#define EVT_LE_META_EVENT_SIZE 1
+
+#define EVT_LE_CONN_COMPLETE	0x01
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+	uint8_t		role;
+	uint8_t		peer_bdaddr_type;
+	bdaddr_t	peer_bdaddr;
+	uint16_t	interval;
+	uint16_t	latency;
+	uint16_t	supervision_timeout;
+	uint8_t		master_clock_accuracy;
+} __attribute__ ((packed)) evt_le_connection_complete;
+#define EVT_LE_CONN_COMPLETE_SIZE 18
+
+#define EVT_LE_ADVERTISING_REPORT	0x02
+typedef struct {
+	uint8_t		evt_type;
+	uint8_t		bdaddr_type;
+	bdaddr_t	bdaddr;
+	uint8_t		length;
+	uint8_t		data[0];
+} __attribute__ ((packed)) le_advertising_info;
+#define LE_ADVERTISING_INFO_SIZE 9
+
+#define EVT_LE_CONN_UPDATE_COMPLETE	0x03
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+	uint16_t	interval;
+	uint16_t	latency;
+	uint16_t	supervision_timeout;
+} __attribute__ ((packed)) evt_le_connection_update_complete;
+#define EVT_LE_CONN_UPDATE_COMPLETE_SIZE 9
+
+#define EVT_LE_READ_REMOTE_USED_FEATURES_COMPLETE	0x04
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+	uint8_t		features[8];
+} __attribute__ ((packed)) evt_le_read_remote_used_features_complete;
+#define EVT_LE_READ_REMOTE_USED_FEATURES_COMPLETE_SIZE 11
+
+#define EVT_LE_LTK_REQUEST	0x05
+typedef struct {
+	uint16_t	handle;
+	uint64_t	random;
+	uint16_t	diversifier;
+} __attribute__ ((packed)) evt_le_long_term_key_request;
+#define EVT_LE_LTK_REQUEST_SIZE 12
+
+#define EVT_PHYSICAL_LINK_COMPLETE		0x40
+typedef struct {
+	uint8_t		status;
+	uint8_t		handle;
+} __attribute__ ((packed)) evt_physical_link_complete;
+#define EVT_PHYSICAL_LINK_COMPLETE_SIZE 2
+
+#define EVT_CHANNEL_SELECTED		0x41
+
+#define EVT_DISCONNECT_PHYSICAL_LINK_COMPLETE	0x42
+typedef struct {
+	uint8_t		status;
+	uint8_t		handle;
+	uint8_t		reason;
+} __attribute__ ((packed)) evt_disconn_physical_link_complete;
+#define EVT_DISCONNECT_PHYSICAL_LINK_COMPLETE_SIZE 3
+
+#define EVT_PHYSICAL_LINK_LOSS_EARLY_WARNING	0x43
+typedef struct {
+	uint8_t		handle;
+	uint8_t		reason;
+} __attribute__ ((packed)) evt_physical_link_loss_warning;
+#define EVT_PHYSICAL_LINK_LOSS_WARNING_SIZE 2
+
+#define EVT_PHYSICAL_LINK_RECOVERY		0x44
+typedef struct {
+	uint8_t		handle;
+} __attribute__ ((packed)) evt_physical_link_recovery;
+#define EVT_PHYSICAL_LINK_RECOVERY_SIZE 1
+
+#define EVT_LOGICAL_LINK_COMPLETE		0x45
+typedef struct {
+	uint8_t		status;
+	uint16_t	log_handle;
+	uint8_t		handle;
+	uint8_t		tx_flow_id;
+} __attribute__ ((packed)) evt_logical_link_complete;
+#define EVT_LOGICAL_LINK_COMPLETE_SIZE 5
+
+#define EVT_DISCONNECT_LOGICAL_LINK_COMPLETE	0x46
+
+#define EVT_FLOW_SPEC_MODIFY_COMPLETE		0x47
+typedef struct {
+	uint8_t		status;
+	uint16_t	handle;
+} __attribute__ ((packed)) evt_flow_spec_modify_complete;
+#define EVT_FLOW_SPEC_MODIFY_COMPLETE_SIZE 3
+
+#define EVT_NUMBER_COMPLETED_BLOCKS		0x48
+
+#define EVT_AMP_STATUS_CHANGE			0x4D
+typedef struct {
+	uint8_t		status;
+	uint8_t		amp_status;
+} __attribute__ ((packed)) evt_amp_status_change;
+#define EVT_AMP_STATUS_CHANGE_SIZE 2
+
 #define EVT_TESTING			0xFE
 
 #define EVT_VENDOR			0xFF
@@ -1724,8 +2283,13 @@ typedef struct {
 struct sockaddr_hci {
 	sa_family_t	hci_family;
 	unsigned short	hci_dev;
+	unsigned short  hci_channel;
 };
 #define HCI_DEV_NONE	0xffff
+
+#define HCI_CHANNEL_RAW		0
+#define HCI_CHANNEL_CONTROL	1
+#define HCI_CHANNEL_MONITOR	2
 
 struct hci_filter {
 	uint32_t type_mask;

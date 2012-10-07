@@ -38,6 +38,7 @@
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <signal.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
@@ -46,13 +47,34 @@
 #include "textfile.h"
 #include "oui.h"
 
+/* Unofficial value, might still change */
+#define LE_LINK		0x03
+
+#define FLAGS_AD_TYPE 0x01
+#define FLAGS_LIMITED_MODE_BIT 0x01
+#define FLAGS_GENERAL_MODE_BIT 0x02
+
+#define EIR_FLAGS                   0x01  /* flags */
+#define EIR_UUID16_SOME             0x02  /* 16-bit UUID, more available */
+#define EIR_UUID16_ALL              0x03  /* 16-bit UUID, all listed */
+#define EIR_UUID32_SOME             0x04  /* 32-bit UUID, more available */
+#define EIR_UUID32_ALL              0x05  /* 32-bit UUID, all listed */
+#define EIR_UUID128_SOME            0x06  /* 128-bit UUID, more available */
+#define EIR_UUID128_ALL             0x07  /* 128-bit UUID, all listed */
+#define EIR_NAME_SHORT              0x08  /* shortened local name */
+#define EIR_NAME_COMPLETE           0x09  /* complete local name */
+#define EIR_TX_POWER                0x0A  /* transmit power level */
+#define EIR_DEVICE_ID               0x10  /* device ID */
+
 #define for_each_opt(opt, long, short) while ((opt=getopt_long(argc, argv, short ? short:"+", long, NULL)) != -1)
+
+static volatile int signal_received = 0;
 
 static void usage(void);
 
 static int dev_info(int s, int dev_id, long arg)
 {
-	struct hci_dev_info di = { dev_id: dev_id };
+	struct hci_dev_info di = { .dev_id = dev_id };
 	char addr[18];
 
 	if (ioctl(s, HCIGETDEVINFO, (void *) &di))
@@ -61,6 +83,31 @@ static int dev_info(int s, int dev_id, long arg)
 	ba2str(&di.bdaddr, addr);
 	printf("\t%s\t%s\n", di.name, addr);
 	return 0;
+}
+
+static void helper_arg(int min_num_arg, int max_num_arg, int *argc,
+			char ***argv, const char *usage)
+{
+	*argc -= optind;
+	/* too many arguments, but when "max_num_arg < min_num_arg" then no
+		 limiting (prefer "max_num_arg=-1" to gen infinity)
+	*/
+	if ( (*argc > max_num_arg) && (max_num_arg >= min_num_arg ) ) {
+		fprintf(stderr, "%s: too many arguments (maximal: %i)\n",
+				*argv[0], max_num_arg);
+		printf("%s", usage);
+		exit(1);
+	}
+
+	/* print usage */
+	if (*argc < min_num_arg) {
+		fprintf(stderr, "%s: too few arguments (minimal: %i)\n",
+				*argv[0], min_num_arg);
+		printf("%s", usage);
+		exit(0);
+	}
+
+	*argv += optind;
 }
 
 static char *type2str(uint8_t type)
@@ -72,6 +119,8 @@ static char *type2str(uint8_t type)
 		return "ACL";
 	case ESCO_LINK:
 		return "eSCO";
+	case LE_LINK:
+		return "LE";
 	default:
 		return "Unknown";
 	}
@@ -167,7 +216,7 @@ static char *get_minor_device_name(int major, int minor)
 	case 0:	/* misc */
 		return "";
 	case 1:	/* computer */
-		switch(minor) {
+		switch (minor) {
 		case 0:
 			return "Uncategorized";
 		case 1:
@@ -185,7 +234,7 @@ static char *get_minor_device_name(int major, int minor)
 		}
 		break;
 	case 2:	/* phone */
-		switch(minor) {
+		switch (minor) {
 		case 0:
 			return "Uncategorized";
 		case 1:
@@ -205,7 +254,7 @@ static char *get_minor_device_name(int major, int minor)
 	case 3:	/* lan access */
 		if (minor == 0)
 			return "Uncategorized";
-		switch(minor / 8) {
+		switch (minor / 8) {
 		case 0:
 			return "Fully available";
 		case 1:
@@ -225,7 +274,7 @@ static char *get_minor_device_name(int major, int minor)
 		}
 		break;
 	case 4:	/* audio/video */
-		switch(minor) {
+		switch (minor) {
 		case 0:
 			return "Uncategorized";
 		case 1:
@@ -267,7 +316,7 @@ static char *get_minor_device_name(int major, int minor)
 	case 5:	/* peripheral */ {
 		static char cls_str[48]; cls_str[0] = 0;
 
-		switch(minor & 48) {
+		switch (minor & 48) {
 		case 16:
 			strncpy(cls_str, "Keyboard", sizeof(cls_str));
 			break;
@@ -278,10 +327,10 @@ static char *get_minor_device_name(int major, int minor)
 			strncpy(cls_str, "Combo keyboard/pointing device", sizeof(cls_str));
 			break;
 		}
-		if((minor & 15) && (strlen(cls_str) > 0))
+		if ((minor & 15) && (strlen(cls_str) > 0))
 			strcat(cls_str, "/");
 
-		switch(minor & 15) {
+		switch (minor & 15) {
 		case 0:
 			break;
 		case 1:
@@ -306,7 +355,7 @@ static char *get_minor_device_name(int major, int minor)
 			strncat(cls_str, "(reserved)", sizeof(cls_str) - strlen(cls_str));
 			break;
 		}
-		if(strlen(cls_str) > 0)
+		if (strlen(cls_str) > 0)
 			return cls_str;
 	}
 	case 6:	/* imaging */
@@ -320,7 +369,7 @@ static char *get_minor_device_name(int major, int minor)
 			return "Printer";
 		break;
 	case 7: /* wearable */
-		switch(minor) {
+		switch (minor) {
 		case 1:
 			return "Wrist Watch";
 		case 2:
@@ -334,7 +383,7 @@ static char *get_minor_device_name(int major, int minor)
 		}
 		break;
 	case 8: /* toy */
-		switch(minor) {
+		switch (minor) {
 		case 1:
 			return "Robot";
 		case 2:
@@ -391,6 +440,7 @@ static void cmd_dev(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
+	helper_arg(0, 0, &argc, &argv, dev_help);
 
 	printf("Devices:\n");
 
@@ -461,6 +511,7 @@ static void cmd_inq(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
+	helper_arg(0, 0, &argc, &argv, inq_help);
 
 	printf("Inquiring ...\n");
 
@@ -576,6 +627,7 @@ static void cmd_scan(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
+	helper_arg(0, 0, &argc, &argv, scan_help);
 
 	if (dev_id < 0) {
 		dev_id = hci_get_route(NULL);
@@ -785,13 +837,7 @@ static void cmd_name(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", name_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, name_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -844,13 +890,7 @@ static void cmd_info(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", info_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, info_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -986,6 +1026,7 @@ static void cmd_spinq(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
+	helper_arg(0, 0, &argc, &argv, spinq_help);
 
 	if (dev_id < 0)
 		dev_id = hci_get_route(NULL);
@@ -1026,7 +1067,7 @@ static struct option epinq_options[] = {
 
 static const char *epinq_help =
 	"Usage:\n"
-	"\tspinq\n";
+	"\tepinq\n";
 
 static void cmd_epinq(int dev_id, int argc, char **argv)
 {
@@ -1039,6 +1080,7 @@ static void cmd_epinq(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
+	helper_arg(0, 0, &argc, &argv, epinq_help);
 
 	if (dev_id < 0)
 		dev_id = hci_get_route(NULL);
@@ -1087,13 +1129,7 @@ static void cmd_cmd(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 2) {
-		printf("%s", cmd_help);
-		return;
-	}
+	helper_arg(2, -1, &argc, &argv, cmd_help);
 
 	if (dev_id < 0)
 		dev_id = hci_get_route(NULL);
@@ -1170,6 +1206,7 @@ static void cmd_con(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
+	helper_arg(0, 0, &argc, &argv, con_help);
 
 	printf("Connections:\n");
 
@@ -1218,13 +1255,7 @@ static void cmd_cc(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", cc_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, cc_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -1274,13 +1305,7 @@ static void cmd_dc(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", dc_help);
-		return;
-	}
+	helper_arg(1, 2, &argc, &argv, dc_help);
 
 	str2ba(argv[0], &bdaddr);
 	reason = (argc > 1) ? atoi(argv[1]) : HCI_OE_USER_ENDED_CONNECTION;
@@ -1345,13 +1370,7 @@ static void cmd_sr(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 2) {
-		printf("%s", sr_help);
-		return;
-	}
+	helper_arg(2, 2, &argc, &argv, sr_help);
 
 	str2ba(argv[0], &bdaddr);
 	switch (argv[1][0]) {
@@ -1413,13 +1432,7 @@ static void cmd_rssi(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", rssi_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, rssi_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -1487,13 +1500,7 @@ static void cmd_lq(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", lq_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, lq_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -1562,13 +1569,7 @@ static void cmd_tpl(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", tpl_help);
-		return;
-	}
+	helper_arg(1, 2, &argc, &argv, tpl_help);
 
 	str2ba(argv[0], &bdaddr);
 	type = (argc > 1) ? atoi(argv[1]) : 0;
@@ -1639,13 +1640,7 @@ static void cmd_afh(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", afh_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, afh_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -1725,13 +1720,7 @@ static void cmd_cpt(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 2) {
-		printf("%s", cpt_help);
-		return;
-	}
+	helper_arg(2, 2, &argc, &argv, cpt_help);
 
 	str2ba(argv[0], &bdaddr);
 	hci_strtoptype(argv[1], &ptype);
@@ -1810,13 +1799,7 @@ static void cmd_lp(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", lp_help);
-		return;
-	}
+	helper_arg(1, 2, &argc, &argv, lp_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -1909,13 +1892,7 @@ static void cmd_lst(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", lst_help);
-		return;
-	}
+	helper_arg(1, 2, &argc, &argv, lst_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -1999,13 +1976,7 @@ static void cmd_auth(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", auth_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, auth_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -2071,13 +2042,7 @@ static void cmd_enc(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", enc_help);
-		return;
-	}
+	helper_arg(1, 2, &argc, &argv, enc_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -2144,13 +2109,7 @@ static void cmd_key(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", key_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, key_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -2216,13 +2175,7 @@ static void cmd_clkoff(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
-
-	if (argc < 1) {
-		printf("%s", clkoff_help);
-		return;
-	}
+	helper_arg(1, 1, &argc, &argv, clkoff_help);
 
 	str2ba(argv[0], &bdaddr);
 
@@ -2292,8 +2245,7 @@ static void cmd_clock(int dev_id, int argc, char **argv)
 			return;
 		}
 	}
-	argc -= optind;
-	argv += optind;
+	helper_arg(0, 2, &argc, &argv, clock_help);
 
 	if (argc > 0)
 		str2ba(argv[0], &bdaddr);
@@ -2354,35 +2306,706 @@ static void cmd_clock(int dev_id, int argc, char **argv)
 	hci_close_dev(dd);
 }
 
+static int read_flags(uint8_t *flags, const uint8_t *data, size_t size)
+{
+	size_t offset;
+
+	if (!flags || !data)
+		return -EINVAL;
+
+	offset = 0;
+	while (offset < size) {
+		uint8_t len = data[offset];
+		uint8_t type;
+
+		/* Check if it is the end of the significant part */
+		if (len == 0)
+			break;
+
+		if (len + offset > size)
+			break;
+
+		type = data[offset + 1];
+
+		if (type == FLAGS_AD_TYPE) {
+			*flags = data[offset + 2];
+			return 0;
+		}
+
+		offset += 1 + len;
+	}
+
+	return -ENOENT;
+}
+
+static int check_report_filter(uint8_t procedure, le_advertising_info *info)
+{
+	uint8_t flags;
+
+	/* If no discovery procedure is set, all reports are treat as valid */
+	if (procedure == 0)
+		return 1;
+
+	/* Read flags AD type value from the advertising report if it exists */
+	if (read_flags(&flags, info->data, info->length))
+		return 0;
+
+	switch (procedure) {
+	case 'l': /* Limited Discovery Procedure */
+		if (flags & FLAGS_LIMITED_MODE_BIT)
+			return 1;
+		break;
+	case 'g': /* General Discovery Procedure */
+		if (flags & (FLAGS_LIMITED_MODE_BIT | FLAGS_GENERAL_MODE_BIT))
+			return 1;
+		break;
+	default:
+		fprintf(stderr, "Unknown discovery procedure\n");
+	}
+
+	return 0;
+}
+
+static void sigint_handler(int sig)
+{
+	signal_received = sig;
+}
+
+static void eir_parse_name(uint8_t *eir, size_t eir_len,
+						char *buf, size_t buf_len)
+{
+	size_t offset;
+
+	offset = 0;
+	while (offset < eir_len) {
+		uint8_t field_len = eir[0];
+		size_t name_len;
+
+		/* Check for the end of EIR */
+		if (field_len == 0)
+			break;
+
+		if (offset + field_len > eir_len)
+			goto failed;
+
+		switch (eir[1]) {
+		case EIR_NAME_SHORT:
+		case EIR_NAME_COMPLETE:
+			name_len = field_len - 1;
+			if (name_len > buf_len)
+				goto failed;
+
+			memcpy(buf, &eir[2], name_len);
+			return;
+		}
+
+		offset += field_len + 1;
+		eir += field_len + 1;
+	}
+
+failed:
+	snprintf(buf, buf_len, "(unknown)");
+}
+
+static int print_advertising_devices(int dd, uint8_t filter_type)
+{
+	unsigned char buf[HCI_MAX_EVENT_SIZE], *ptr;
+	struct hci_filter nf, of;
+	struct sigaction sa;
+	socklen_t olen;
+	int len;
+
+	olen = sizeof(of);
+	if (getsockopt(dd, SOL_HCI, HCI_FILTER, &of, &olen) < 0) {
+		printf("Could not get socket options\n");
+		return -1;
+	}
+
+	hci_filter_clear(&nf);
+	hci_filter_set_ptype(HCI_EVENT_PKT, &nf);
+	hci_filter_set_event(EVT_LE_META_EVENT, &nf);
+
+	if (setsockopt(dd, SOL_HCI, HCI_FILTER, &nf, sizeof(nf)) < 0) {
+		printf("Could not set socket options\n");
+		return -1;
+	}
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_flags = SA_NOCLDSTOP;
+	sa.sa_handler = sigint_handler;
+	sigaction(SIGINT, &sa, NULL);
+
+	while (1) {
+		evt_le_meta_event *meta;
+		le_advertising_info *info;
+		char addr[18];
+
+		while ((len = read(dd, buf, sizeof(buf))) < 0) {
+			if (errno == EINTR && signal_received == SIGINT) {
+				len = 0;
+				goto done;
+			}
+
+			if (errno == EAGAIN || errno == EINTR)
+				continue;
+			goto done;
+		}
+
+		ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
+		len -= (1 + HCI_EVENT_HDR_SIZE);
+
+		meta = (void *) ptr;
+
+		if (meta->subevent != 0x02)
+			goto done;
+
+		/* Ignoring multiple reports */
+		info = (le_advertising_info *) (meta->data + 1);
+		if (check_report_filter(filter_type, info)) {
+			char name[30];
+
+			memset(name, 0, sizeof(name));
+
+			ba2str(&info->bdaddr, addr);
+			eir_parse_name(info->data, info->length,
+							name, sizeof(name) - 1);
+
+			printf("%s %s\n", addr, name);
+		}
+	}
+
+done:
+	setsockopt(dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
+
+	if (len < 0)
+		return -1;
+
+	return 0;
+}
+
+static struct option lescan_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ "privacy",	0, 0, 'p' },
+	{ "passive",	0, 0, 'P' },
+	{ "discovery",	1, 0, 'd' },
+	{ "duplicates",	0, 0, 'D' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *lescan_help =
+	"Usage:\n"
+	"\tlescan [--privacy] enable privacy\n"
+	"\tlescan [--passive] set scan type passive (default active)\n"
+	"\tlescan [--discovery=g|l] enable general or limited discovery"
+		"procedure\n"
+	"\tlescan [--duplicates] don't filter duplicates\n";
+
+static void cmd_lescan(int dev_id, int argc, char **argv)
+{
+	int err, opt, dd;
+	uint8_t own_type = 0x00;
+	uint8_t scan_type = 0x01;
+	uint8_t filter_type = 0;
+	uint16_t interval = htobs(0x0010);
+	uint16_t window = htobs(0x0010);
+	uint8_t filter_dup = 1;
+
+	for_each_opt(opt, lescan_options, NULL) {
+		switch (opt) {
+		case 'p':
+			own_type = 0x01; /* Random */
+			break;
+		case 'P':
+			scan_type = 0x00; /* Passive */
+			break;
+		case 'd':
+			filter_type = optarg[0];
+			if (filter_type != 'g' && filter_type != 'l') {
+				fprintf(stderr, "Unknown discovery procedure\n");
+				exit(1);
+			}
+
+			interval = htobs(0x0012);
+			window = htobs(0x0012);
+			break;
+		case 'D':
+			filter_dup = 0x00;
+			break;
+		default:
+			printf("%s", lescan_help);
+			return;
+		}
+	}
+	helper_arg(0, 1, &argc, &argv, lescan_help);
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		perror("Could not open device");
+		exit(1);
+	}
+
+	err = hci_le_set_scan_parameters(dd, scan_type, interval, window,
+							own_type, 0x00, 1000);
+	if (err < 0) {
+		perror("Set scan parameters failed");
+		exit(1);
+	}
+
+	err = hci_le_set_scan_enable(dd, 0x01, filter_dup, 1000);
+	if (err < 0) {
+		perror("Enable scan failed");
+		exit(1);
+	}
+
+	printf("LE Scan ...\n");
+
+	err = print_advertising_devices(dd, filter_type);
+	if (err < 0) {
+		perror("Could not receive advertising events");
+		exit(1);
+	}
+
+	err = hci_le_set_scan_enable(dd, 0x00, filter_dup, 1000);
+	if (err < 0) {
+		perror("Disable scan failed");
+		exit(1);
+	}
+
+	hci_close_dev(dd);
+}
+
+static struct option lecc_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ "random",	0, 0, 'r' },
+	{ "whitelist",	0, 0, 'w' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *lecc_help =
+	"Usage:\n"
+	"\tlecc [--random] <bdaddr>\n"
+	"\tlecc --whitelist\n";
+
+static void cmd_lecc(int dev_id, int argc, char **argv)
+{
+	int err, opt, dd;
+	bdaddr_t bdaddr;
+	uint16_t interval, latency, max_ce_length, max_interval, min_ce_length;
+	uint16_t min_interval, supervision_timeout, window, handle;
+	uint8_t initiator_filter, own_bdaddr_type, peer_bdaddr_type;
+
+	peer_bdaddr_type = LE_PUBLIC_ADDRESS;
+	initiator_filter = 0; /* Use peer address */
+
+	for_each_opt(opt, lecc_options, NULL) {
+		switch (opt) {
+		case 'r':
+			peer_bdaddr_type = LE_RANDOM_ADDRESS;
+			break;
+		case 'w':
+			initiator_filter = 0x01; /* Use white list */
+			break;
+		default:
+			printf("%s", lecc_help);
+			return;
+		}
+	}
+	helper_arg(0, 1, &argc, &argv, lecc_help);
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		perror("Could not open device");
+		exit(1);
+	}
+
+	memset(&bdaddr, 0, sizeof(bdaddr_t));
+	if (argv[0])
+		str2ba(argv[0], &bdaddr);
+
+	interval = htobs(0x0004);
+	window = htobs(0x0004);
+	own_bdaddr_type = 0x00;
+	min_interval = htobs(0x000F);
+	max_interval = htobs(0x000F);
+	latency = htobs(0x0000);
+	supervision_timeout = htobs(0x0C80);
+	min_ce_length = htobs(0x0001);
+	max_ce_length = htobs(0x0001);
+
+	err = hci_le_create_conn(dd, interval, window, initiator_filter,
+			peer_bdaddr_type, bdaddr, own_bdaddr_type, min_interval,
+			max_interval, latency, supervision_timeout,
+			min_ce_length, max_ce_length, &handle, 25000);
+	if (err < 0) {
+		perror("Could not create connection");
+		exit(1);
+	}
+
+	printf("Connection handle %d\n", handle);
+
+	hci_close_dev(dd);
+}
+
+static struct option lewladd_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ "random",	0, 0, 'r' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *lewladd_help =
+	"Usage:\n"
+	"\tlewladd [--random] <bdaddr>\n";
+
+static void cmd_lewladd(int dev_id, int argc, char **argv)
+{
+	int err, opt, dd;
+	bdaddr_t bdaddr;
+	uint8_t bdaddr_type = LE_PUBLIC_ADDRESS;
+
+	for_each_opt(opt, lewladd_options, NULL) {
+		switch (opt) {
+		case 'r':
+			bdaddr_type = LE_RANDOM_ADDRESS;
+			break;
+		default:
+			printf("%s", lewladd_help);
+			return;
+		}
+	}
+
+	helper_arg(1, 1, &argc, &argv, lewladd_help);
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		perror("Could not open device");
+		exit(1);
+	}
+
+	str2ba(argv[0], &bdaddr);
+
+	err = hci_le_add_white_list(dd, &bdaddr, bdaddr_type, 1000);
+	hci_close_dev(dd);
+
+	if (err < 0) {
+		err = -errno;
+		fprintf(stderr, "Can't add to white list: %s(%d)\n",
+							strerror(-err), -err);
+		exit(1);
+	}
+}
+
+static struct option lewlrm_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *lewlrm_help =
+	"Usage:\n"
+	"\tlewlrm <bdaddr>\n";
+
+static void cmd_lewlrm(int dev_id, int argc, char **argv)
+{
+	int err, opt, dd;
+	bdaddr_t bdaddr;
+
+	for_each_opt(opt, lewlrm_options, NULL) {
+		switch (opt) {
+		default:
+			printf("%s", lewlrm_help);
+			return;
+		}
+	}
+
+	helper_arg(1, 1, &argc, &argv, lewlrm_help);
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		perror("Could not open device");
+		exit(1);
+	}
+
+	str2ba(argv[0], &bdaddr);
+
+	err = hci_le_rm_white_list(dd, &bdaddr, LE_PUBLIC_ADDRESS, 1000);
+	hci_close_dev(dd);
+
+	if (err < 0) {
+		err = errno;
+		fprintf(stderr, "Can't remove from white list: %s(%d)\n",
+							strerror(err), err);
+		exit(1);
+	}
+}
+
+static struct option lewlsz_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *lewlsz_help =
+	"Usage:\n"
+	"\tlewlsz\n";
+
+static void cmd_lewlsz(int dev_id, int argc, char **argv)
+{
+	int err, dd, opt;
+	uint8_t size;
+
+	for_each_opt(opt, lewlsz_options, NULL) {
+		switch (opt) {
+		default:
+			printf("%s", lewlsz_help);
+			return;
+		}
+	}
+
+	helper_arg(0, 0, &argc, &argv, lewlsz_help);
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		perror("Could not open device");
+		exit(1);
+	}
+
+	err = hci_le_read_white_list_size(dd, &size, 1000);
+	hci_close_dev(dd);
+
+	if (err < 0) {
+		err = -errno;
+		fprintf(stderr, "Can't read white list size: %s(%d)\n",
+							strerror(-err), -err);
+		exit(1);
+	}
+
+	printf("White list size: %d\n", size);
+}
+
+static struct option lewlclr_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *lewlclr_help =
+	"Usage:\n"
+	"\tlewlclr\n";
+
+static void cmd_lewlclr(int dev_id, int argc, char **argv)
+{
+	int err, dd, opt;
+
+	for_each_opt(opt, lewlclr_options, NULL) {
+		switch (opt) {
+		default:
+			printf("%s", lewlclr_help);
+			return;
+		}
+	}
+
+	helper_arg(0, 0, &argc, &argv, lewlclr_help);
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		perror("Could not open device");
+		exit(1);
+	}
+
+	err = hci_le_clear_white_list(dd, 1000);
+	hci_close_dev(dd);
+
+	if (err < 0) {
+		err = -errno;
+		fprintf(stderr, "Can't clear white list: %s(%d)\n",
+							strerror(-err), -err);
+		exit(1);
+	}
+}
+
+static struct option ledc_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *ledc_help =
+	"Usage:\n"
+	"\tledc <handle> [reason]\n";
+
+static void cmd_ledc(int dev_id, int argc, char **argv)
+{
+	int err, opt, dd;
+	uint16_t handle;
+	uint8_t reason;
+
+	for_each_opt(opt, ledc_options, NULL) {
+		switch (opt) {
+		default:
+			printf("%s", ledc_help);
+			return;
+		}
+	}
+	helper_arg(1, 2, &argc, &argv, ledc_help);
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		perror("Could not open device");
+		exit(1);
+	}
+
+	handle = atoi(argv[0]);
+
+	reason = (argc > 1) ? atoi(argv[1]) : HCI_OE_USER_ENDED_CONNECTION;
+
+	err = hci_disconnect(dd, handle, reason, 10000);
+	if (err < 0) {
+		perror("Could not disconnect");
+		exit(1);
+	}
+
+	hci_close_dev(dd);
+}
+
+static struct option lecup_options[] = {
+	{ "help",	0, 0, 'h' },
+	{ "handle",	1, 0, 'H' },
+	{ "min",	1, 0, 'm' },
+	{ "max",	1, 0, 'M' },
+	{ "latency",	1, 0, 'l' },
+	{ "timeout",	1, 0, 't' },
+	{ 0, 0, 0, 0 }
+};
+
+static const char *lecup_help =
+	"Usage:\n"
+	"\tlecup <handle> <min> <max> <latency> <timeout>\n"
+	"\tOptions:\n"
+	"\t    -H, --handle <0xXXXX>  LE connection handle\n"
+	"\t    -m, --min <interval>   Range: 0x0006 to 0x0C80\n"
+	"\t    -M, --max <interval>   Range: 0x0006 to 0x0C80\n"
+	"\t    -l, --latency <range>  Slave latency. Range: 0x0000 to 0x03E8\n"
+	"\t    -t, --timeout  <time>  N * 10ms. Range: 0x000A to 0x0C80\n"
+	"\n\t min/max range: 7.5ms to 4s. Multiply factor: 1.25ms"
+	"\n\t timeout range: 100ms to 32.0s. Larger than max interval\n";
+
+static void cmd_lecup(int dev_id, int argc, char **argv)
+{
+	uint16_t handle = 0, min, max, latency, timeout;
+	int opt, dd, base;
+
+	/* Aleatory valid values */
+	min = 0x0C8;
+	max = 0x0960;
+	latency = 0x0007;
+	timeout = 0x0C80;
+
+	for_each_opt(opt, lecup_options, NULL) {
+		if (optarg && strncasecmp("0x", optarg, 2) == 0)
+			base = 16;
+		else
+			base = 10;
+
+		switch (opt) {
+		case 'H':
+			handle = strtoul(optarg, NULL, base);
+			break;
+		case 'm':
+			min = strtoul(optarg, NULL, base);
+			break;
+		case 'M':
+			max = strtoul(optarg, NULL, base);
+			break;
+		case 'l':
+			latency = strtoul(optarg, NULL, base);
+			break;
+		case 't':
+			timeout = strtoul(optarg, NULL, base);
+			break;
+		default:
+			printf("%s", lecup_help);
+			return;
+		}
+	}
+
+	if (handle == 0) {
+		printf("%s", lecup_help);
+		return;
+	}
+
+	if (dev_id < 0)
+		dev_id = hci_get_route(NULL);
+
+	dd = hci_open_dev(dev_id);
+	if (dd < 0) {
+		fprintf(stderr, "HCI device open failed\n");
+		exit(1);
+	}
+
+	if (hci_le_conn_update(dd, htobs(handle), htobs(min), htobs(max),
+				htobs(latency), htobs(timeout), 5000) < 0) {
+		int err = -errno;
+		fprintf(stderr, "Could not change connection params: %s(%d)\n",
+							strerror(-err), -err);
+	}
+
+	hci_close_dev(dd);
+}
+
 static struct {
 	char *cmd;
 	void (*func)(int dev_id, int argc, char **argv);
 	char *doc;
 } command[] = {
-	{ "dev",    cmd_dev,    "Display local devices"                },
-	{ "inq",    cmd_inq,    "Inquire remote devices"               },
-	{ "scan",   cmd_scan,   "Scan for remote devices"              },
-	{ "name",   cmd_name,   "Get name from remote device"          },
-	{ "info",   cmd_info,   "Get information from remote device"   },
-	{ "spinq",  cmd_spinq,  "Start periodic inquiry"               },
-	{ "epinq",  cmd_epinq,  "Exit periodic inquiry"                },
-	{ "cmd",    cmd_cmd,    "Submit arbitrary HCI commands"        },
-	{ "con",    cmd_con,    "Display active connections"           },
-	{ "cc",     cmd_cc,     "Create connection to remote device"   },
-	{ "dc",     cmd_dc,     "Disconnect from remote device"        },
-	{ "sr",     cmd_sr,     "Switch master/slave role"             },
-	{ "cpt",    cmd_cpt,    "Change connection packet type"        },
-	{ "rssi",   cmd_rssi,   "Display connection RSSI"              },
-	{ "lq",     cmd_lq,     "Display link quality"                 },
-	{ "tpl",    cmd_tpl,    "Display transmit power level"         },
-	{ "afh",    cmd_afh,    "Display AFH channel map"              },
-	{ "lp",     cmd_lp,     "Set/display link policy settings"     },
-	{ "lst",    cmd_lst,    "Set/display link supervision timeout" },
-	{ "auth",   cmd_auth,   "Request authentication"               },
-	{ "enc",    cmd_enc,    "Set connection encryption"            },
-	{ "key",    cmd_key,    "Change connection link key"           },
-	{ "clkoff", cmd_clkoff, "Read clock offset"                    },
-	{ "clock",  cmd_clock,  "Read local or remote clock"           },
+	{ "dev",      cmd_dev,     "Display local devices"                },
+	{ "inq",      cmd_inq,     "Inquire remote devices"               },
+	{ "scan",     cmd_scan,    "Scan for remote devices"              },
+	{ "name",     cmd_name,    "Get name from remote device"          },
+	{ "info",     cmd_info,    "Get information from remote device"   },
+	{ "spinq",    cmd_spinq,   "Start periodic inquiry"               },
+	{ "epinq",    cmd_epinq,   "Exit periodic inquiry"                },
+	{ "cmd",      cmd_cmd,     "Submit arbitrary HCI commands"        },
+	{ "con",      cmd_con,     "Display active connections"           },
+	{ "cc",       cmd_cc,      "Create connection to remote device"   },
+	{ "dc",       cmd_dc,      "Disconnect from remote device"        },
+	{ "sr",       cmd_sr,      "Switch master/slave role"             },
+	{ "cpt",      cmd_cpt,     "Change connection packet type"        },
+	{ "rssi",     cmd_rssi,    "Display connection RSSI"              },
+	{ "lq",       cmd_lq,      "Display link quality"                 },
+	{ "tpl",      cmd_tpl,     "Display transmit power level"         },
+	{ "afh",      cmd_afh,     "Display AFH channel map"              },
+	{ "lp",       cmd_lp,      "Set/display link policy settings"     },
+	{ "lst",      cmd_lst,     "Set/display link supervision timeout" },
+	{ "auth",     cmd_auth,    "Request authentication"               },
+	{ "enc",      cmd_enc,     "Set connection encryption"            },
+	{ "key",      cmd_key,     "Change connection link key"           },
+	{ "clkoff",   cmd_clkoff,  "Read clock offset"                    },
+	{ "clock",    cmd_clock,   "Read local or remote clock"           },
+	{ "lescan",   cmd_lescan,  "Start LE scan"                        },
+	{ "lewladd",  cmd_lewladd, "Add device to LE White List"          },
+	{ "lewlrm",   cmd_lewlrm,  "Remove device from LE White List"     },
+	{ "lewlsz",   cmd_lewlsz,  "Read size of LE White List"           },
+	{ "lewlclr",  cmd_lewlclr, "Clear LE White list"                  },
+	{ "lecc",     cmd_lecc,    "Create a LE Connection"               },
+	{ "ledc",     cmd_ledc,    "Disconnect a LE Connection"           },
+	{ "lecup",    cmd_lecup,   "LE Connection Update"                 },
 	{ NULL, NULL, 0 }
 };
 
@@ -2448,10 +3071,18 @@ int main(int argc, char *argv[])
 	}
 
 	for (i = 0; command[i].cmd; i++) {
-		if (strncmp(command[i].cmd, argv[0], 3))
+		if (strncmp(command[i].cmd,
+				argv[0], strlen(command[i].cmd)))
 			continue;
+
 		command[i].func(dev_id, argc, argv);
 		break;
 	}
+
+	if (command[i].cmd == 0) {
+		fprintf(stderr, "Unknown command - \"%s\"\n", *argv);
+		exit(1);
+	}
+
 	return 0;
 }

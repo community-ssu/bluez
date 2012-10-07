@@ -34,8 +34,8 @@
 #include <sys/socket.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
+#include <bluetooth/sdp.h>
+#include <bluetooth/sdp_lib.h>
 
 #include <glib.h>
 
@@ -43,9 +43,10 @@
 
 #include <gdbus.h>
 
+#include "glib-helper.h"
 #include "hcid.h"
 #include "dbus-common.h"
-#include "logging.h"
+#include "log.h"
 #include "adapter.h"
 #include "error.h"
 #include "manager.h"
@@ -61,37 +62,6 @@ const char *manager_get_base_path(void)
 	return base_path;
 }
 
-void manager_update_svc(const bdaddr_t *bdaddr, uint8_t svc)
-{
-	GSList *l;
-	bdaddr_t src;
-
-	for (l = adapters; l != NULL; l = l->next) {
-		struct btd_adapter *adapter = l->data;
-
-		adapter_get_address(adapter, &src);
-
-		if (bacmp(bdaddr, BDADDR_ANY) != 0 && bacmp(bdaddr, &src) != 0)
-			continue;
-
-		adapter_update(adapter, svc);
-	}
-}
-
-static inline DBusMessage *invalid_args(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg,
-			ERROR_INTERFACE ".InvalidArguments",
-			"Invalid arguments in method call");
-}
-
-static inline DBusMessage *no_such_adapter(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg,
-			ERROR_INTERFACE ".NoSuchAdapter",
-			"No such adapter");
-}
-
 static DBusMessage *default_adapter(DBusConnection *conn,
 					DBusMessage *msg, void *data)
 {
@@ -101,7 +71,7 @@ static DBusMessage *default_adapter(DBusConnection *conn,
 
 	adapter = manager_find_adapter_by_id(default_adapter_id);
 	if (!adapter)
-		return no_such_adapter(msg);
+		return btd_error_no_such_adapter(msg);
 
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
@@ -128,21 +98,24 @@ static DBusMessage *find_adapter(DBusConnection *conn,
 							DBUS_TYPE_INVALID))
 		return NULL;
 
-	/* hci_devid() would make sense to use here, except it
-	   is restricted to devices which are up */
+	/* hci_devid() would make sense to use here, except it is
+	 * restricted to devices which are up */
 	if (!strcmp(pattern, "any") || !strcmp(pattern, "00:00:00:00:00:00")) {
 		path = adapter_any_get_path();
 		if (path != NULL)
 			goto done;
-		return no_such_adapter(msg);
+		return btd_error_no_such_adapter(msg);
 	} else if (!strncmp(pattern, "hci", 3) && strlen(pattern) >= 4) {
 		dev_id = atoi(pattern + 3);
 		adapter = manager_find_adapter_by_id(dev_id);
-	} else
-		adapter = manager_find_adapter_by_address(pattern);
+	} else {
+		bdaddr_t bdaddr;
+		str2ba(pattern, &bdaddr);
+		adapter = manager_find_adapter(&bdaddr);
+	}
 
 	if (!adapter)
-		return no_such_adapter(msg);
+		return btd_error_no_such_adapter(msg);
 
 	path = adapter_get_path(adapter);
 
@@ -209,13 +182,11 @@ static DBusMessage *get_properties(DBusConnection *conn,
 			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &dict);
 
 	array = g_new0(char *, g_slist_length(adapters) + 1);
-	for (i = 0, list = adapters; list; list = list->next, i++) {
+	for (i = 0, list = adapters; list; list = list->next) {
 		struct btd_adapter *adapter = list->data;
 
-		if (!adapter_is_ready(adapter))
-			continue;
-
 		array[i] = (char *) adapter_get_path(adapter);
+		i++;
 	}
 	dict_append_array(&dict, "Adapters", DBUS_TYPE_OBJECT_PATH, &array, i);
 	g_free(array);
@@ -229,7 +200,8 @@ static GDBusMethodTable manager_methods[] = {
 	{ "GetProperties",	"",	"a{sv}",get_properties	},
 	{ "DefaultAdapter",	"",	"o",	default_adapter	},
 	{ "FindAdapter",	"s",	"o",	find_adapter	},
-	{ "ListAdapters",	"",	"ao",	list_adapters	},
+	{ "ListAdapters",	"",	"ao",	list_adapters,
+						G_DBUS_METHOD_FLAG_DEPRECATED},
 	{ }
 };
 
@@ -248,8 +220,8 @@ dbus_bool_t manager_init(DBusConnection *conn, const char *path)
 	snprintf(base_path, sizeof(base_path), "/org/bluez/%d", getpid());
 
 	return g_dbus_register_interface(conn, "/", MANAGER_INTERFACE,
-			manager_methods, manager_signals,
-			NULL, NULL, NULL);
+					manager_methods, manager_signals,
+					NULL, NULL, NULL);
 }
 
 static void manager_update_adapters(void)
@@ -259,20 +231,43 @@ static void manager_update_adapters(void)
 	int i;
 
 	array = g_new0(char *, g_slist_length(adapters) + 1);
-	for (i = 0, list = adapters; list; list = list->next, i++) {
+	for (i = 0, list = adapters; list; list = list->next) {
 		struct btd_adapter *adapter = list->data;
 
-		if (!adapter_is_ready(adapter))
-			continue;
-
 		array[i] = (char *) adapter_get_path(adapter);
+		i++;
 	}
 
 	emit_array_property_changed(connection, "/",
 					MANAGER_INTERFACE, "Adapters",
-					DBUS_TYPE_OBJECT_PATH, &array);
+					DBUS_TYPE_OBJECT_PATH, &array, i);
 
 	g_free(array);
+}
+
+static void manager_set_default_adapter(int id)
+{
+	struct btd_adapter *adapter;
+	const gchar *path;
+
+	default_adapter_id = id;
+
+	adapter = manager_find_adapter_by_id(id);
+	if (!adapter)
+		return;
+
+	path = adapter_get_path(adapter);
+
+	g_dbus_emit_signal(connection, "/",
+			MANAGER_INTERFACE,
+			"DefaultAdapterChanged",
+			DBUS_TYPE_OBJECT_PATH, &path,
+			DBUS_TYPE_INVALID);
+}
+
+struct btd_adapter *manager_get_default_adapter(void)
+{
+	return manager_find_adapter_by_id(default_adapter_id);
 }
 
 static void manager_remove_adapter(struct btd_adapter *adapter)
@@ -296,6 +291,7 @@ static void manager_remove_adapter(struct btd_adapter *adapter)
 			DBUS_TYPE_INVALID);
 
 	adapter_remove(adapter);
+	btd_adapter_unref(adapter);
 
 	if (adapters == NULL)
 		btd_start_exit_timer();
@@ -303,8 +299,15 @@ static void manager_remove_adapter(struct btd_adapter *adapter)
 
 void manager_cleanup(DBusConnection *conn, const char *path)
 {
-	g_slist_foreach(adapters, (GFunc) manager_remove_adapter, NULL);
-	g_slist_free(adapters);
+	while (adapters) {
+		struct btd_adapter *adapter = adapters->data;
+
+		adapters = g_slist_remove(adapters, adapter);
+		adapter_remove(adapter);
+		btd_adapter_unref(adapter);
+	}
+
+	btd_start_exit_timer();
 
 	g_dbus_unregister_interface(conn, "/", MANAGER_INTERFACE);
 }
@@ -318,15 +321,6 @@ static gint adapter_id_cmp(gconstpointer a, gconstpointer b)
 	return dev_id == id ? 0 : -1;
 }
 
-static gint adapter_path_cmp(gconstpointer a, gconstpointer b)
-{
-	struct btd_adapter *adapter = (struct btd_adapter *) a;
-	const char *path = b;
-	const gchar *adapter_path = adapter_get_path(adapter);
-
-	return strcmp(adapter_path, path);
-}
-
 static gint adapter_cmp(gconstpointer a, gconstpointer b)
 {
 	struct btd_adapter *adapter = (struct btd_adapter *) a;
@@ -336,19 +330,6 @@ static gint adapter_cmp(gconstpointer a, gconstpointer b)
 	adapter_get_address(adapter, &src);
 
 	return bacmp(&src, bdaddr);
-}
-
-static gint adapter_address_cmp(gconstpointer a, gconstpointer b)
-{
-	struct btd_adapter *adapter = (struct btd_adapter *) a;
-	const char *address = b;
-	bdaddr_t bdaddr;
-	char addr[18];
-
-	adapter_get_address(adapter, &bdaddr);
-	ba2str(&bdaddr, addr);
-
-	return strcmp(addr, address);
 }
 
 struct btd_adapter *manager_find_adapter(const bdaddr_t *sba)
@@ -362,37 +343,21 @@ struct btd_adapter *manager_find_adapter(const bdaddr_t *sba)
 	return match->data;
 }
 
-struct btd_adapter *manager_find_adapter_by_address(const char *address)
-{
-	GSList *match;
-
-	match = g_slist_find_custom(adapters, address, adapter_address_cmp);
-	if (!match)
-		return NULL;
-
-	return match->data;
-}
-
-struct btd_adapter *manager_find_adapter_by_path(const char *path)
-{
-	GSList *match;
-
-	match = g_slist_find_custom(adapters, path, adapter_path_cmp);
-	if (!match)
-		return NULL;
-
-	return match->data;
-}
-
 struct btd_adapter *manager_find_adapter_by_id(int id)
 {
 	GSList *match;
 
-	match = g_slist_find_custom(adapters, GINT_TO_POINTER(id), adapter_id_cmp);
+	match = g_slist_find_custom(adapters, GINT_TO_POINTER(id),
+							adapter_id_cmp);
 	if (!match)
 		return NULL;
 
 	return match->data;
+}
+
+void manager_foreach_adapter(adapter_cb func, gpointer user_data)
+{
+	g_slist_foreach(adapters, (GFunc) func, user_data);
 }
 
 GSList *manager_get_adapters(void)
@@ -403,35 +368,57 @@ GSList *manager_get_adapters(void)
 void manager_add_adapter(const char *path)
 {
 	g_dbus_emit_signal(connection, "/",
-			MANAGER_INTERFACE, "AdapterAdded",
-			DBUS_TYPE_OBJECT_PATH, &path,
-			DBUS_TYPE_INVALID);
+				MANAGER_INTERFACE, "AdapterAdded",
+				DBUS_TYPE_OBJECT_PATH, &path,
+				DBUS_TYPE_INVALID);
 
 	manager_update_adapters();
 
 	btd_stop_exit_timer();
 }
 
-int manager_register_adapter(int id, gboolean devup)
+struct btd_adapter *btd_manager_register_adapter(int id, gboolean up)
 {
 	struct btd_adapter *adapter;
+	const char *path;
 
 	adapter = manager_find_adapter_by_id(id);
 	if (adapter) {
 		error("Unable to register adapter: hci%d already exist", id);
-		return -1;
+		return NULL;
 	}
 
-	adapter = adapter_create(connection, id, devup);
+	adapter = adapter_create(connection, id);
 	if (!adapter)
-		return -1;
+		return NULL;
 
 	adapters = g_slist_append(adapters, adapter);
 
-	return 0;
+	if (!adapter_init(adapter, up)) {
+		adapters = g_slist_remove(adapters, adapter);
+		btd_adapter_unref(adapter);
+		return NULL;
+	}
+
+	path = adapter_get_path(adapter);
+	g_dbus_emit_signal(connection, "/",
+				MANAGER_INTERFACE, "AdapterAdded",
+				DBUS_TYPE_OBJECT_PATH, &path,
+				DBUS_TYPE_INVALID);
+
+	manager_update_adapters();
+
+	btd_stop_exit_timer();
+
+	if (default_adapter_id < 0)
+		manager_set_default_adapter(id);
+
+	DBG("Adapter %s registered", path);
+
+	return btd_adapter_ref(adapter);
 }
 
-int manager_unregister_adapter(int id)
+int btd_manager_unregister_adapter(int id)
 {
 	struct btd_adapter *adapter;
 	const gchar *path;
@@ -449,75 +436,13 @@ int manager_unregister_adapter(int id)
 	return 0;
 }
 
-int manager_start_adapter(int id)
-{
-	struct btd_adapter *adapter;
-	int ret;
-
-	adapter = manager_find_adapter_by_id(id);
-	if (!adapter) {
-		error("Getting device data failed: hci%d", id);
-		return -EINVAL;
-	}
-
-	ret = adapter_start(adapter);
-	if (ret < 0)
-		return ret;
-
-	if (default_adapter_id < 0)
-		manager_set_default_adapter(id);
-
-	return ret;
-}
-
-int manager_stop_adapter(int id)
-{
-	struct btd_adapter *adapter;
-
-	adapter = manager_find_adapter_by_id(id);
-	if (!adapter) {
-		error("Getting device data failed: hci%d", id);
-		return -EINVAL;
-	}
-
-	return adapter_stop(adapter);
-}
-
-int manager_get_default_adapter()
-{
-	return default_adapter_id;
-}
-
-void manager_set_default_adapter(int id)
-{
-	struct btd_adapter *adapter;
-	const gchar *path;
-
-	default_adapter_id = id;
-
-	adapter = manager_find_adapter_by_id(id);
-	if (!adapter)
-		return;
-
-	path = adapter_get_path(adapter);
-
-	g_dbus_emit_signal(connection, "/",
-			MANAGER_INTERFACE,
-			"DefaultAdapterChanged",
-			DBUS_TYPE_OBJECT_PATH, &path,
-			DBUS_TYPE_INVALID);
-}
-
-void btd_manager_set_offline(gboolean offline)
+void btd_manager_set_did(uint16_t vendor, uint16_t product, uint16_t version)
 {
 	GSList *l;
 
 	for (l = adapters; l != NULL; l = g_slist_next(l)) {
 		struct btd_adapter *adapter = l->data;
 
-		if (offline)
-			btd_adapter_switch_offline(adapter);
-		else
-			btd_adapter_restore_powered(adapter);
+		btd_adapter_set_did(adapter, vendor, product, version);
 	}
 }

@@ -44,7 +44,7 @@
 #include "sbc.h"
 #include "rtp.h"
 
-//#define ENABLE_DEBUG
+/* #define ENABLE_DEBUG */
 
 #define UINT_SECS_MAX (UINT_MAX / 1000000 - 1)
 
@@ -237,9 +237,11 @@ iter_sleep:
 		ret = poll(fds, 2, poll_timeout);
 
 		if (ret < 0) {
-			SNDERR("poll error: %s (%d)", strerror(errno), errno);
-			if (errno != EINTR)
+			if (errno != EINTR) {
+				SNDERR("poll error: %s (%d)", strerror(errno),
+								errno);
 				break;
+			}
 		} else if (ret > 0) {
 			ret = (fds[0].revents) ? 0 : 1;
 			SNDERR("poll fd %d revents %d", ret, fds[ret].revents);
@@ -418,9 +420,10 @@ static int bluetooth_prepare(snd_pcm_ioplug_t *io)
 	}
 
 	/* wake up any client polling at us */
-	err = write(data->pipefd[1], &c, 1);
-	if (err < 0)
+	if (write(data->pipefd[1], &c, 1) < 0) {
+		err = -errno;
 		return err;
+	}
 
 	return 0;
 }
@@ -818,7 +821,6 @@ static int bluetooth_playback_poll_revents(snd_pcm_ioplug_t *io,
 					unsigned short *revents)
 {
 	static char buf[1];
-	int ret;
 
 	DBG("");
 
@@ -829,7 +831,8 @@ static int bluetooth_playback_poll_revents(snd_pcm_ioplug_t *io,
 	assert(pfds[1].fd >= 0);
 
 	if (io->state != SND_PCM_STATE_PREPARED)
-		ret = read(pfds[0].fd, buf, 1);
+		if (read(pfds[0].fd, buf, 1) < 0)
+			SYSERR("read error: %s (%d)", strerror(errno), errno);
 
 	if (pfds[1].revents & (POLLERR | POLLHUP | POLLNVAL))
 		io->state = SND_PCM_STATE_DISCONNECTED;
@@ -966,7 +969,7 @@ static snd_pcm_sframes_t bluetooth_a2dp_read(snd_pcm_ioplug_t *io,
 
 static int avdtp_write(struct bluetooth_data *data)
 {
-	int ret = 0;
+	int err;
 	struct rtp_header *header;
 	struct rtp_payload *payload;
 	struct bluetooth_a2dp *a2dp = &data->a2dp;
@@ -983,10 +986,10 @@ static int avdtp_write(struct bluetooth_data *data)
 	header->timestamp = htonl(a2dp->nsamples);
 	header->ssrc = htonl(1);
 
-	ret = send(data->stream.fd, a2dp->buffer, a2dp->count, MSG_DONTWAIT);
-	if (ret < 0) {
-		DBG("send returned %d errno %s.", ret, strerror(errno));
-		ret = -errno;
+	err = send(data->stream.fd, a2dp->buffer, a2dp->count, MSG_DONTWAIT);
+	if (err < 0) {
+		err = -errno;
+		DBG("send failed: %s (%d)", strerror(-err), -err);
 	}
 
 	/* Reset buffer of data to send */
@@ -995,7 +998,7 @@ static int avdtp_write(struct bluetooth_data *data)
 	a2dp->samples = 0;
 	a2dp->seq_num++;
 
-	return ret;
+	return err;
 }
 
 static snd_pcm_sframes_t bluetooth_a2dp_write(snd_pcm_ioplug_t *io,
@@ -1007,7 +1010,7 @@ static snd_pcm_sframes_t bluetooth_a2dp_write(snd_pcm_ioplug_t *io,
 	snd_pcm_sframes_t ret = 0;
 	unsigned int bytes_left;
 	int frame_size, encoded;
-	size_t written;
+	ssize_t written;
 	uint8_t *buff;
 
 	DBG("areas->step=%u areas->first=%u offset=%lu size=%lu",
@@ -1050,8 +1053,11 @@ static snd_pcm_sframes_t bluetooth_a2dp_write(snd_pcm_ioplug_t *io,
 	}
 
 	/* Check if we have any left over data from the last write */
-	if (data->count > 0 && (bytes_left - data->count) >= a2dp->codesize) {
-		int additional_bytes_needed = a2dp->codesize - data->count;
+	if (data->count > 0) {
+		unsigned int additional_bytes_needed =
+						a2dp->codesize - data->count;
+		if (additional_bytes_needed > bytes_left)
+			goto out;
 
 		memcpy(data->buffer + data->count, buff,
 						additional_bytes_needed);
@@ -1122,6 +1128,7 @@ static snd_pcm_sframes_t bluetooth_a2dp_write(snd_pcm_ioplug_t *io,
 		}
 	}
 
+out:
 	/* Copy the extra to our temp buffer for the next write */
 	if (bytes_left > 0) {
 		memcpy(data->buffer + data->count, buff, bytes_left);
@@ -1540,7 +1547,7 @@ static int audioservice_send(int sk, const bt_audio_msg_header_t *msg)
 	else {
 		err = -errno;
 		SNDERR("Error sending data to audio service: %s(%d)",
-			strerror(errno), errno);
+			strerror(-err), -err);
 	}
 
 	return err;
@@ -1561,7 +1568,7 @@ static int audioservice_recv(int sk, bt_audio_msg_header_t *inmsg)
 	if (ret < 0) {
 		err = -errno;
 		SNDERR("Error receiving IPC data from bluetoothd: %s (%d)",
-						strerror(errno), errno);
+						strerror(-err), -err);
 	} else if ((size_t) ret < sizeof(bt_audio_msg_header_t)) {
 		SNDERR("Too short (%d bytes) IPC packet from bluetoothd", ret);
 		err = -EINVAL;
@@ -1659,7 +1666,7 @@ static int bluetooth_init(struct bluetooth_data *data,
 	data->stream.fd = -1;
 
 	sk = bt_audio_service_open();
-	if (sk <= 0) {
+	if (sk < 0) {
 		err = -errno;
 		goto failed;
 	}

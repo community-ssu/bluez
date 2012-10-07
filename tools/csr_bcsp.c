@@ -46,7 +46,7 @@ static uint8_t send_buffer[512];
 static struct ubcsp_packet receive_packet;
 static uint8_t receive_buffer[512];
 
-int csr_open_bcsp(char *device)
+int csr_open_bcsp(char *device, speed_t bcsp_rate)
 {
 	struct termios ti;
 	uint8_t delay, activity = 0x00;
@@ -84,7 +84,7 @@ int csr_open_bcsp(char *device)
 	ti.c_cc[VMIN] = 1;
 	ti.c_cc[VTIME] = 0;
 
-	cfsetospeed(&ti, B38400);
+	cfsetospeed(&ti, bcsp_rate);
 
 	if (tcsetattr(fd, TCSANOW, &ti) < 0) {
 		fprintf(stderr, "Can't change port settings: %s (%d)\n",
@@ -219,6 +219,7 @@ static int do_command(uint16_t command, uint16_t seqnum, uint16_t varid, uint8_t
 
 			if (timeout++ > 5000) {
 				fprintf(stderr, "Operation timed out\n");
+				errno = ETIMEDOUT;
 				return -1;
 			}
 		}

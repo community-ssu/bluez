@@ -34,7 +34,7 @@
 #include <glib.h>
 #include <dbus/dbus.h>
 
-#include "logging.h"
+#include "log.h"
 
 #include "glib-helper.h"
 #include "btio.h"
@@ -62,6 +62,7 @@ static void connect_event_cb(GIOChannel *chan, GError *err, gpointer data)
 {
 	uint16_t psm;
 	bdaddr_t src, dst;
+	char address[18];
 	GError *gerr = NULL;
 	int ret;
 
@@ -82,17 +83,21 @@ static void connect_event_cb(GIOChannel *chan, GError *err, gpointer data)
 		return;
 	}
 
-	debug("Incoming connection on PSM %d", psm);
+	ba2str(&dst, address);
+	DBG("Incoming connection from %s on PSM %d", address, psm);
 
 	ret = input_device_set_channel(&src, &dst, psm, chan);
 	if (ret == 0)
 		return;
 
+	error("Refusing input device connect: %s (%d)", strerror(-ret), -ret);
+
 	/* Send unplug virtual cable to unknown devices */
 	if (ret == -ENOENT && psm == L2CAP_PSM_HIDP_CTRL) {
 		unsigned char unplug = 0x15;
-		int err, sk = g_io_channel_unix_get_fd(chan);
-		err = write(sk, &unplug, sizeof(unplug));
+		int sk = g_io_channel_unix_get_fd(chan);
+		if (write(sk, &unplug, sizeof(unplug)) < 0)
+			error("Unable to send virtual cable unplug");
 	}
 
 	g_io_channel_shutdown(chan, TRUE, NULL);
@@ -156,7 +161,11 @@ static void confirm_event_cb(GIOChannel *chan, gpointer user_data)
 	}
 
 	if (server->confirm) {
-		error("Refusing connection: setup in progress");
+		char address[18];
+
+		ba2str(&dst, address);
+		error("Refusing connection from %s: setup in progress",
+								address);
 		goto drop;
 	}
 
@@ -187,6 +196,7 @@ int server_start(const bdaddr_t *src)
 				server, NULL, &err,
 				BT_IO_OPT_SOURCE_BDADDR, src,
 				BT_IO_OPT_PSM, L2CAP_PSM_HIDP_CTRL,
+				BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_LOW,
 				BT_IO_OPT_INVALID);
 	if (!server->ctrl) {
 		error("Failed to listen on control channel");
@@ -199,6 +209,7 @@ int server_start(const bdaddr_t *src)
 				server, NULL, &err,
 				BT_IO_OPT_SOURCE_BDADDR, src,
 				BT_IO_OPT_PSM, L2CAP_PSM_HIDP_INTR,
+				BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_LOW,
 				BT_IO_OPT_INVALID);
 	if (!server->intr) {
 		error("Failed to listen on interrupt channel");

@@ -139,7 +139,7 @@ static int service_send(struct userdata *u, const bt_audio_msg_header_t *msg)
 	else {
 		err = -errno;
 		ERR("Error sending data to audio service: %s(%d)",
-			strerror(errno), errno);
+			strerror(-err), -err);
 	}
 
 	return err;
@@ -171,7 +171,7 @@ static int service_recv(struct userdata *u, bt_audio_msg_header_t *rsp)
 	} else {
 		err = -errno;
 		ERR("Error receiving data from audio service: %s(%d)",
-			strerror(errno), errno);
+			strerror(-err), -err);
 	}
 
 	return err;
@@ -214,9 +214,13 @@ static int init_bt(struct userdata *u)
 	DBG("bt_audio_service_open");
 
 	u->service_fd = bt_audio_service_open();
-	if (u->service_fd <= 0) {
-		perror(strerror(errno));
-		return errno;
+	if (u->service_fd < 0) {
+		int err = -errno;
+
+		ERR("bt_audio_service_open() failed: %s (%d)", strerror(-err),
+									-err);
+
+		return err;
 	}
 
 	return 0;
@@ -1029,8 +1033,7 @@ static gboolean input_cb(GIOChannel *gin, GIOCondition condition, gpointer data)
 		if (sscanf(line, "%*s %as", &address) != 1)
 			DBG("set with bdaddr BDADDR");
 
-		if (u->address)
-			free(u->address);
+		free(u->address);
 
 		u->address = address;
 		DBG("bdaddr %s", u->address);
@@ -1049,8 +1052,7 @@ static gboolean input_cb(GIOChannel *gin, GIOCondition condition, gpointer data)
 			DBG("set with profile [hsp|a2dp]");
 		}
 
-		if (profile)
-			free(profile);
+		free(profile);
 		DBG("profile %s", u->transport == BT_CAPABILITIES_TRANSPORT_SCO ?
 			"hsp" : "a2dp");
 	}

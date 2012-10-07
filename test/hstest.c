@@ -159,7 +159,7 @@ int main(int argc, char *argv[])
 
 	char *filename;
 	mode_t filemode;
-	int err, mode = 0;
+	int mode = 0;
 	int dd, rd, sd, fd;
 	uint16_t sco_handle, sco_mtu, vs;
 
@@ -244,8 +244,10 @@ int main(int argc, char *argv[])
 
 	fprintf(stderr, "SCO audio channel connected (handle %d, mtu %d)\n", sco_handle, sco_mtu);
 
-	if (mode == RECORD)
-		err = write(rd, "RING\r\n", 6);
+	if (mode == RECORD) {
+		if (write(rd, "RING\r\n", 6) < 0)
+			return -errno;
+	}
 
 	maxfd = (rd > sd) ? rd : sd;
 
@@ -277,7 +279,7 @@ int main(int argc, char *argv[])
 					case PLAY:
 						rlen = read(fd, buf, rlen);
 
-						wlen = 0; 
+						wlen = 0;
 						p = buf;
 						while (rlen > sco_mtu) {
 						        wlen += write(sd, p, sco_mtu);

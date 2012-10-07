@@ -31,8 +31,6 @@
 #include <string.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
 #include <bluetooth/sdp.h>
 #include <bluetooth/sdp_lib.h>
 
@@ -43,7 +41,7 @@
 #include "plugin.h"
 #include "adapter.h"
 #include "error.h"
-#include "logging.h"
+#include "log.h"
 
 #define SERVICE_INTERFACE "org.bluez.Service"
 
@@ -107,7 +105,7 @@ static void element_start(GMarkupParseContext *context,
 				break;
 			}
 		}
-		debug("New attribute 0x%04x", ctx_data->attr_id);
+		DBG("New attribute 0x%04x", ctx_data->attr_id);
 		return;
 	}
 
@@ -174,13 +172,14 @@ static void element_end(GMarkupParseContext *context,
 			int ret = sdp_attr_add(ctx_data->record, ctx_data->attr_id,
 							ctx_data->stack_head->data);
 			if (ret == -1)
-				debug("Trouble adding attribute\n");
+				DBG("Could not add attribute 0x%04x",
+							ctx_data->attr_id);
 
 			ctx_data->stack_head->data = NULL;
 			sdp_xml_data_free(ctx_data->stack_head);
 			ctx_data->stack_head = NULL;
 		} else {
-			debug("No data for attribute 0x%04x\n", ctx_data->attr_id);
+			DBG("No data for attribute 0x%04x", ctx_data->attr_id);
 		}
 		return;
 	}
@@ -321,7 +320,7 @@ static void exit_callback(DBusConnection *conn, void *user_data)
 	struct service_adapter *serv_adapter = user_record->serv_adapter;
 	struct pending_auth *auth;
 
-	debug("remove record");
+	DBG("remove record");
 
 	serv_adapter->records = g_slist_remove(serv_adapter->records,
 						user_record);
@@ -337,41 +336,6 @@ static void exit_callback(DBusConnection *conn, void *user_data)
 
 	g_free(user_record->sender);
 	g_free(user_record);
-}
-
-static inline DBusMessage *invalid_arguments(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".InvalidArguments",
-					"Invalid arguments in method call");
-}
-
-static inline DBusMessage *not_available(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".NotAvailable",
-							"Not Available");
-}
-
-static inline DBusMessage *failed(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".Failed", "Failed");
-}
-
-static inline DBusMessage *failed_strerror(DBusMessage *msg, int err)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".Failed",
-			strerror(err));
-}
-
-static inline DBusMessage *not_authorized(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".NotAuthorized",
-					"Not Authorized");
-}
-
-static inline DBusMessage *does_not_exist(DBusMessage *msg)
-{
-	return g_dbus_create_error(msg, ERROR_INTERFACE ".DoesNotExist",
-					"Does Not Exist");
 }
 
 static int add_xml_record(DBusConnection *conn, const char *sender,
@@ -409,7 +373,7 @@ static int add_xml_record(DBusConnection *conn, const char *sender,
 	serv_adapter->records = g_slist_append(serv_adapter->records,
 								user_record);
 
-	debug("listener_id %d", user_record->listener_id);
+	DBG("listener_id %d", user_record->listener_id);
 
 	*handle = user_record->handle;
 
@@ -425,9 +389,7 @@ static DBusMessage *update_record(DBusConnection *conn, DBusMessage *msg,
 
 	if (remove_record_from_server(handle) < 0) {
 		sdp_record_free(sdp_record);
-		return g_dbus_create_error(msg,
-				ERROR_INTERFACE ".NotAvailable",
-				"Not Available");
+		return btd_error_not_available(msg);
 	}
 
 	if (serv_adapter->adapter)
@@ -440,9 +402,7 @@ static DBusMessage *update_record(DBusConnection *conn, DBusMessage *msg,
 	if (err < 0) {
 		sdp_record_free(sdp_record);
 		error("Failed to update the service record");
-		return g_dbus_create_error(msg,
-				ERROR_INTERFACE ".Failed",
-				strerror(EIO));
+		return btd_error_failed(msg, strerror(-err));
 	}
 
 	return dbus_message_new_method_return(msg);
@@ -466,22 +426,18 @@ static DBusMessage *update_xml_record(DBusConnection *conn,
 
 	len = (record ? strlen(record) : 0);
 	if (len == 0)
-		return invalid_arguments(msg);
+		return btd_error_invalid_args(msg);
 
 	user_record = find_record(serv_adapter, handle,
 				dbus_message_get_sender(msg));
 	if (!user_record)
-		return g_dbus_create_error(msg,
-				ERROR_INTERFACE ".NotAvailable",
-				"Not Available");
+		return btd_error_not_available(msg);
 
 	sdp_record = sdp_xml_parse_record(record, len);
 	if (!sdp_record) {
 		error("Parsing of XML service record failed");
-		sdp_record_free(sdp_record);
-		return g_dbus_create_error(msg,
-				ERROR_INTERFACE ".Failed",
-				strerror(EIO));
+		return btd_error_failed(msg,
+					"Parsing of XML service record failed");
 	}
 
 	return update_record(conn, msg, serv_adapter, handle, sdp_record);
@@ -493,13 +449,13 @@ static int remove_record(DBusConnection *conn, const char *sender,
 {
 	struct record_data *user_record;
 
-	debug("remove record 0x%x", handle);
+	DBG("remove record 0x%x", handle);
 
 	user_record = find_record(serv_adapter, handle, sender);
 	if (!user_record)
 		return -1;
 
-	debug("listner_id %d", user_record->listener_id);
+	DBG("listner_id %d", user_record->listener_id);
 
 	g_dbus_remove_watch(conn, user_record->listener_id);
 
@@ -524,7 +480,7 @@ static DBusMessage *add_service_record(DBusConnection *conn,
 	sender = dbus_message_get_sender(msg);
 	err = add_xml_record(conn, sender, serv_adapter, record, &handle);
 	if (err < 0)
-		return failed_strerror(msg, err);
+		return btd_error_failed(msg, strerror(-err));
 
 	reply = dbus_message_new_method_return(msg);
 	if (!reply)
@@ -558,7 +514,7 @@ static DBusMessage *remove_service_record(DBusConnection *conn,
 	sender = dbus_message_get_sender(msg);
 
 	if (remove_record(conn, sender, serv_adapter, handle) < 0)
-		return not_available(msg);
+		return btd_error_not_available(msg);
 
 	return dbus_message_new_method_return(msg);
 }
@@ -579,7 +535,7 @@ static void auth_cb(DBusError *derr, void *user_data)
 	if (derr) {
 		error("Access denied: %s", derr->message);
 
-		reply = not_authorized(auth->msg);
+		reply = btd_error_not_authorized(auth->msg);
 		dbus_message_unref(auth->msg);
 		g_dbus_send_message(auth->conn, reply);
 		goto done;
@@ -630,24 +586,26 @@ static DBusMessage *request_authorization(DBusConnection *conn,
 
 	sender = dbus_message_get_sender(msg);
 	if (find_pending_by_sender(serv_adapter, sender))
-		return failed(msg);
+		return btd_error_does_not_exist(msg);
 
 	user_record = find_record(serv_adapter, handle, sender);
 	if (!user_record) {
 		user_record = find_record(serv_adapter_any, handle, sender);
 		if (!user_record)
-			return not_authorized(msg);
+			return btd_error_not_authorized(msg);
 	}
 
 	record = sdp_record_find(user_record->handle);
+	if (record == NULL)
+		return btd_error_not_authorized(msg);
 
 	if (sdp_get_service_classes(record, &services) < 0) {
 		sdp_record_free(record);
-		return not_authorized(msg);
+		return btd_error_not_authorized(msg);
 	}
 
 	if (services == NULL)
-		return not_authorized(msg);
+		return btd_error_not_authorized(msg);
 
 	uuid = services->data;
 	uuid128 = sdp_uuid_to_uuid128(uuid);
@@ -656,7 +614,7 @@ static DBusMessage *request_authorization(DBusConnection *conn,
 
 	if (sdp_uuid2strn(uuid128, uuid_str, MAX_LEN_UUID_STR) < 0) {
 		bt_free(uuid128);
-		return not_authorized(msg);
+		return btd_error_not_authorized(msg);
 	}
 	bt_free(uuid128);
 
@@ -672,7 +630,7 @@ static DBusMessage *request_authorization(DBusConnection *conn,
 
 	auth = next_pending(serv_adapter);
 	if (auth == NULL)
-		return does_not_exist(msg);
+		return btd_error_does_not_exist(msg);
 
 	if (serv_adapter->adapter)
 		adapter_get_address(serv_adapter->adapter, &src);
@@ -684,7 +642,7 @@ static DBusMessage *request_authorization(DBusConnection *conn,
 		serv_adapter->pending_list = g_slist_remove(serv_adapter->pending_list,
 									auth);
 		g_free(auth);
-		return not_authorized(msg);
+		return btd_error_not_authorized(msg);
 	}
 
 	return NULL;
@@ -703,7 +661,7 @@ static DBusMessage *cancel_authorization(DBusConnection *conn,
 
 	auth = find_pending_by_sender(serv_adapter, sender);
 	if (auth == NULL)
-		return does_not_exist(msg);
+		return btd_error_does_not_exist(msg);
 
 	if (serv_adapter->adapter)
 		adapter_get_address(serv_adapter->adapter, &src);
@@ -712,7 +670,7 @@ static DBusMessage *cancel_authorization(DBusConnection *conn,
 
 	btd_cancel_authorization(&src, &auth->dst);
 
-	reply = not_authorized(auth->msg);
+	reply = btd_error_not_authorized(auth->msg);
 	dbus_message_unref(auth->msg);
 	g_dbus_send_message(auth->conn, reply);
 
@@ -787,7 +745,7 @@ static int register_interface(const char *path, struct btd_adapter *adapter)
 		return -EIO;
 	}
 
-	debug("Registered interface %s on path %s", SERVICE_INTERFACE, path);
+	DBG("Registered interface %s on path %s", SERVICE_INTERFACE, path);
 
 	if (serv_adapter->adapter == NULL)
 		serv_adapter_any = serv_adapter;

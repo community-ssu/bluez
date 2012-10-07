@@ -26,6 +26,13 @@
 #include <errno.h>
 #include <glib.h>
 
+/* Response and hold values */
+#define BTRH_NOT_SUPPORTED	-2
+#define BTRH_NONE		-1
+#define BTRH_HOLD		0
+#define BTRH_ACCEPT		1
+#define BTRH_REJECT		2
+
 /* HFP feature bits */
 #define AG_FEATURE_THREE_WAY_CALLING		0x0001
 #define AG_FEATURE_EC_ANDOR_NR			0x0002
@@ -155,6 +162,7 @@ void telephony_list_current_calls_req(void *telephony_device);
 void telephony_operator_selection_req(void *telephony_device);
 void telephony_call_hold_req(void *telephony_device, const char *cmd);
 void telephony_nr_and_ec_req(void *telephony_device, gboolean enable);
+void telephony_voice_dial_req(void *telephony_device, gboolean enable);
 void telephony_key_press_req(void *telephony_device, const char *keys);
 
 /* AG responses to HF requests. These are implemented by headset.c */
@@ -170,6 +178,7 @@ int telephony_list_current_calls_rsp(void *telephony_device, cme_error_t err);
 int telephony_operator_selection_rsp(void *telephony_device, cme_error_t err);
 int telephony_call_hold_rsp(void *telephony_device, cme_error_t err);
 int telephony_nr_and_ec_rsp(void *telephony_device, cme_error_t err);
+int telephony_voice_dial_rsp(void *telephony_device, cme_error_t err);
 int telephony_key_press_rsp(void *telephony_device, cme_error_t err);
 
 /* Event indications by AG. These are implemented by headset.c */
@@ -179,6 +188,7 @@ int telephony_incoming_call_ind(const char *number, int type);
 int telephony_calling_stopped_ind(void);
 int telephony_ready_ind(uint32_t features, const struct indicator *indicators,
 			int rh, const char *chld);
+int telephony_deinit(void);
 int telephony_list_current_call_ind(int idx, int dir, int status, int mode,
 					int mprty, const char *number,
 					int type);
@@ -205,10 +215,10 @@ static inline int telephony_update_indicator(struct indicator *indicators,
 	if (!ind)
 		return -ENOENT;
 
-	debug("Telephony indicator \"%s\" %d->%d", desc, ind->val, new_val);
+	DBG("Telephony indicator \"%s\" %d->%d", desc, ind->val, new_val);
 
 	if (ind->ignore_redundant && ind->val == new_val) {
-		debug("Ignoring no-change indication");
+		DBG("Ignoring no-change indication");
 		return 0;
 	}
 

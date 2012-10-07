@@ -44,6 +44,9 @@ typedef void (*headset_state_cb) (struct audio_device *dev,
 					headset_state_t old_state,
 					headset_state_t new_state,
 					void *user_data);
+typedef void (*headset_nrec_cb) (struct audio_device *dev,
+					gboolean nrec,
+					void *user_data);
 
 unsigned int headset_add_state_cb(headset_state_cb cb, void *user_data);
 gboolean headset_remove_state_cb(unsigned int id);
@@ -76,8 +79,12 @@ unsigned int headset_suspend_stream(struct audio_device *dev,
 					void *user_data);
 gboolean headset_cancel_stream(struct audio_device *dev, unsigned int id);
 
-gboolean get_hfp_active(struct audio_device *dev);
-void set_hfp_active(struct audio_device *dev, gboolean active);
+gboolean headset_get_hfp_active(struct audio_device *dev);
+void headset_set_hfp_active(struct audio_device *dev, gboolean active);
+
+gboolean headset_get_rfcomm_initiator(struct audio_device *dev);
+void headset_set_rfcomm_initiator(struct audio_device *dev,
+							gboolean initiator);
 
 void headset_set_authorized(struct audio_device *dev);
 int headset_connect_rfcomm(struct audio_device *dev, GIOChannel *chan);
@@ -90,6 +97,10 @@ int headset_get_channel(struct audio_device *dev);
 
 int headset_get_sco_fd(struct audio_device *dev);
 gboolean headset_get_nrec(struct audio_device *dev);
+unsigned int headset_add_nrec_cb(struct audio_device *dev,
+					headset_nrec_cb cb, void *user_data);
+gboolean headset_remove_nrec_cb(struct audio_device *dev, unsigned int id);
+gboolean headset_get_inband(struct audio_device *dev);
 gboolean headset_get_sco_hci(struct audio_device *dev);
 
 gboolean headset_is_active(struct audio_device *dev);

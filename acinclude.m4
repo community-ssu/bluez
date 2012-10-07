@@ -15,13 +15,14 @@ AC_DEFUN([COMPILER_FLAGS], [
 		CFLAGS="-Wall -O2"
 	fi
 	if (test "$USE_MAINTAINER_MODE" = "yes"); then
-		CFLAGS+=" -Werror -Wextra"
-		CFLAGS+=" -Wno-unused-parameter"
-		CFLAGS+=" -Wno-missing-field-initializers"
-		CFLAGS+=" -Wdeclaration-after-statement"
-		CFLAGS+=" -Wmissing-declarations"
-		CFLAGS+=" -Wredundant-decls"
-		CFLAGS+=" -Wcast-align"
+		CFLAGS="$CFLAGS -Werror -Wextra"
+		CFLAGS="$CFLAGS -Wno-unused-parameter"
+		CFLAGS="$CFLAGS -Wno-missing-field-initializers"
+		CFLAGS="$CFLAGS -Wdeclaration-after-statement"
+		CFLAGS="$CFLAGS -Wmissing-declarations"
+		CFLAGS="$CFLAGS -Wredundant-decls"
+		CFLAGS="$CFLAGS -Wcast-align"
+		CFLAGS="$CFLAGS -DG_DISABLE_DEPRECATED"
 	fi
 ])
 
@@ -83,13 +84,11 @@ AC_DEFUN([AC_INIT_BLUEZ], [
 	AC_SUBST(CONFIGDIR, "${configdir}")
 	AC_SUBST(STORAGEDIR, "${storagedir}")
 
-	UDEV_DATADIR="`$PKG_CONFIG --variable=udevdir udev`"
-	if (test -z "${UDEV_DATADIR}"); then
-		UDEV_DATADIR="${sysconfdir}/udev/rules.d"
-	else
-		UDEV_DATADIR="${UDEV_DATADIR}/rules.d"
+	UDEV_DIR="`$PKG_CONFIG --variable=udevdir udev`"
+	if (test -z "${UDEV_DIR}"); then
+		UDEV_DIR="/lib/udev"
 	fi
-	AC_SUBST(UDEV_DATADIR)
+	AC_SUBST(UDEV_DIR)
 ])
 
 AC_DEFUN([AC_PATH_DBUS], [
@@ -98,29 +97,34 @@ AC_DEFUN([AC_PATH_DBUS], [
 	AC_CHECK_LIB(dbus-1, dbus_watch_get_unix_fd, dummy=yes,
 		AC_DEFINE(NEED_DBUS_WATCH_GET_UNIX_FD, 1,
 			[Define to 1 if you need the dbus_watch_get_unix_fd() function.]))
+	AC_CHECK_LIB(dbus-1, dbus_connection_can_send_type, dummy=yes,
+		AC_DEFINE(NEED_DBUS_CONNECTION_CAN_SEND_TYPE, 1,
+			[Define to 1 if you need the dbus_connection_can_send_type() function.]
+))
 	AC_SUBST(DBUS_CFLAGS)
 	AC_SUBST(DBUS_LIBS)
 ])
 
 AC_DEFUN([AC_PATH_GLIB], [
-	PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.14, dummy=yes,
-				AC_MSG_ERROR(GLib library version 2.14 or later is required))
+	PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.16, dummy=yes,
+				AC_MSG_ERROR(GLib library version 2.16 or later is required))
+	AC_CHECK_LIB(glib-2.0, g_slist_free_full, dummy=yes,
+		AC_DEFINE(NEED_G_SLIST_FREE_FULL, 1,
+			[Define to 1 if you need g_slist_free_full() function.]))
+	AC_CHECK_LIB(glib-2.0, g_list_free_full, dummy=yes,
+		AC_DEFINE(NEED_G_LIST_FREE_FULL, 1,
+			[Define to 1 if you need g_list_free_full() function.]))
 	AC_SUBST(GLIB_CFLAGS)
 	AC_SUBST(GLIB_LIBS)
 ])
 
 AC_DEFUN([AC_PATH_GSTREAMER], [
-	PKG_CHECK_MODULES(GSTREAMER, gstreamer-0.10 gstreamer-plugins-base-0.10, gstreamer_found=yes, gstreamer_found=no)
+	PKG_CHECK_MODULES(GSTREAMER, gstreamer-0.10 >= 0.10.30 gstreamer-plugins-base-0.10, gstreamer_found=yes,
+				AC_MSG_WARN(GStreamer library version 0.10.30 or later is required);gstreamer_found=no)
 	AC_SUBST(GSTREAMER_CFLAGS)
 	AC_SUBST(GSTREAMER_LIBS)
 	GSTREAMER_PLUGINSDIR=`$PKG_CONFIG --variable=pluginsdir gstreamer-0.10`
 	AC_SUBST(GSTREAMER_PLUGINSDIR)
-])
-
-AC_DEFUN([AC_PATH_PULSE], [
-	PKG_CHECK_MODULES(PULSE, libpulse, pulse_found=yes, pulse_found=no)
-	AC_SUBST(PULSE_CFLAGS)
-	AC_SUBST(PULSE_LIBS)
 ])
 
 AC_DEFUN([AC_PATH_ALSA], [
@@ -142,16 +146,10 @@ AC_DEFUN([AC_PATH_USB], [
 			[Define to 1 if you need the usb_interrupt_read() function.]))
 ])
 
-AC_DEFUN([AC_PATH_NETLINK], [
-	PKG_CHECK_MODULES(NETLINK, libnl-1, netlink_found=yes, netlink_found=no)
-	AC_SUBST(NETLINK_CFLAGS)
-	AC_SUBST(NETLINK_LIBS)
-])
-
-AC_DEFUN([AC_PATH_CAPNG], [
-        PKG_CHECK_MODULES(CAPNG, libcap-ng, capng_found=yes, capng_found=no)
-        AC_SUBST(CAPNG_CFLAGS)
-        AC_SUBST(CAPNG_LIBS)
+AC_DEFUN([AC_PATH_UDEV], [
+	PKG_CHECK_MODULES(UDEV, libudev, udev_found=yes, udev_found=no)
+	AC_SUBST(UDEV_CFLAGS)
+	AC_SUBST(UDEV_LIBS)
 ])
 
 AC_DEFUN([AC_PATH_SNDFILE], [
@@ -160,15 +158,36 @@ AC_DEFUN([AC_PATH_SNDFILE], [
 	AC_SUBST(SNDFILE_LIBS)
 ])
 
+AC_DEFUN([AC_PATH_READLINE], [
+	AC_CHECK_HEADER(readline/readline.h,
+		AC_CHECK_LIB(readline, main,
+			[ readline_found=yes
+			AC_SUBST(READLINE_LIBS, "-lreadline")
+			], readline_found=no),
+		[])
+])
+
+AC_DEFUN([AC_PATH_CHECK], [
+	PKG_CHECK_MODULES(CHECK, check >= 0.9.6, check_found=yes, check_found=no)
+	AC_SUBST(CHECK_CFLAGS)
+	AC_SUBST(CHECK_LIBS)
+])
+
+AC_DEFUN([AC_PATH_OUI], [
+	AC_ARG_WITH(ouifile,
+		    AS_HELP_STRING([--with-ouifile=PATH],[Path to the oui.txt file @<:@auto@:>@]),
+		    [ac_with_ouifile=$withval],
+		    [ac_with_ouifile="/var/lib/misc/oui.txt"])
+	AC_DEFINE_UNQUOTED(OUIFILE, ["$ac_with_ouifile"], [Define the OUI file path])
+])
+
 AC_DEFUN([AC_ARG_BLUEZ], [
 	debug_enable=no
 	optimization_enable=yes
 	fortify_enable=yes
 	pie_enable=yes
-	capng_enable=${capng_found}
 	sndfile_enable=${sndfile_found}
-	netlink_enable=no
-	hal_enable=${hal_found}
+	hal_enable=no
 	usb_enable=${usb_found}
 	alsa_enable=${alsa_found}
 	gstreamer_enable=${gstreamer_found}
@@ -176,8 +195,14 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 	input_enable=yes
 	serial_enable=yes
 	network_enable=yes
+	sap_enable=no
+	proximity_enable=no
+	time_enable=no
+	alert_enable=no
 	service_enable=yes
-	tracer_enable=no
+	health_enable=no
+	pnat_enable=no
+	gatt_example_enable=no
 	tools_enable=yes
 	hidd_enable=no
 	pand_enable=no
@@ -188,9 +213,13 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 	pcmcia_enable=no
 	hid2hci_enable=no
 	dfutool_enable=no
-	udevrules_enable=yes
-	configfiles_enable=yes
+	datafiles_enable=yes
 	telephony_driver=dummy
+	maemo6_enable=no
+	sap_driver=dummy
+	dbusoob_enable=no
+	wiimote_enable=no
+	thermometer_enable=no
 
 	AC_ARG_ENABLE(optimization, AC_HELP_STRING([--disable-optimization], [disable code optimization]), [
 		optimization_enable=${enableval}
@@ -204,12 +233,29 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 		pie_enable=${enableval}
 	])
 
-	AC_ARG_ENABLE(capng, AC_HELP_STRING([--disable-capng], [disable capabilities dropping]), [
-		capng_enable=${enableval}
-	])
-
 	AC_ARG_ENABLE(network, AC_HELP_STRING([--disable-network], [disable network plugin]), [
 		network_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(sap, AC_HELP_STRING([--enable-sap], [enable sap plugin]), [
+		sap_enable=${enableval}
+	])
+
+	AC_ARG_WITH(sap, AC_HELP_STRING([--with-sap=DRIVER], [select SAP driver]), [
+		sap_driver=${withval}
+	])
+	AC_SUBST([SAP_DRIVER], [sap-${sap_driver}.c])
+
+	AC_ARG_ENABLE(proximity, AC_HELP_STRING([--enable-proximity], [enable proximity plugin]), [
+		proximity_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(time, AC_HELP_STRING([--enable-time], [enable Time Profile plugin]), [
+		time_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(alert, AC_HELP_STRING([--enable-alert], [enable Phone Alert Profile plugin]), [
+		alert_enable=${enableval}
 	])
 
 	AC_ARG_ENABLE(serial, AC_HELP_STRING([--disable-serial], [disable serial plugin]), [
@@ -228,6 +274,18 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 		service_enable=${enableval}
 	])
 
+	AC_ARG_ENABLE(health, AC_HELP_STRING([--enable-health], [enable health plugin]), [
+		health_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(pnat, AC_HELP_STRING([--enable-pnat], [enable pnat plugin]), [
+		pnat_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(gatt-example, AC_HELP_STRING([--enable-gatt-example], [enable GATT example plugin]), [
+		gatt_example_enable=${enableval}
+	])
+
 	AC_ARG_ENABLE(gstreamer, AC_HELP_STRING([--enable-gstreamer], [enable GStreamer support]), [
 		gstreamer_enable=${enableval}
 	])
@@ -238,14 +296,6 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 
 	AC_ARG_ENABLE(usb, AC_HELP_STRING([--enable-usb], [enable USB support]), [
 		usb_enable=${enableval}
-	])
-
-	AC_ARG_ENABLE(netlink, AC_HELP_STRING([--enable-netlink], [enable NETLINK support]), [
-		netlink_enable=${enableval}
-	])
-
-	AC_ARG_ENABLE(tracer, AC_HELP_STRING([--enable-tracer], [install Tracing daemon]), [
-		tracer_enable=${enableval}
 	])
 
 	AC_ARG_ENABLE(tools, AC_HELP_STRING([--enable-tools], [install Bluetooth utilities]), [
@@ -288,12 +338,8 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 		test_enable=${enableval}
 	])
 
-	AC_ARG_ENABLE(udevrules, AC_HELP_STRING([--enable-udevrules], [install Bluetooth udev rules]), [
-		udevrules_enable=${enableval}
-	])
-
-	AC_ARG_ENABLE(configfiles, AC_HELP_STRING([--enable-configfiles], [install Bluetooth configuration files]), [
-		configfiles_enable=${enableval}
+	AC_ARG_ENABLE(datafiles, AC_HELP_STRING([--enable-datafiles], [install Bluetooth configuration and data files]), [
+		datafiles_enable=${enableval}
 	])
 
 	AC_ARG_ENABLE(debug, AC_HELP_STRING([--enable-debug], [enable compiling with debugging information]), [
@@ -305,6 +351,26 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 	])
 
 	AC_SUBST([TELEPHONY_DRIVER], [telephony-${telephony_driver}.c])
+
+	AC_ARG_ENABLE(maemo6, AC_HELP_STRING([--enable-maemo6], [compile with maemo6 plugin]), [
+		maemo6_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(dbusoob, AC_HELP_STRING([--enable-dbusoob], [compile with D-Bus OOB plugin]), [
+		dbusoob_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(wiimote, AC_HELP_STRING([--enable-wiimote], [compile with Wii Remote plugin]), [
+		wiimote_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(hal, AC_HELP_STRING([--enable-hal], [Use HAL to determine adapter class]), [
+		hal_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(thermometer, AC_HELP_STRING([--enable-thermometer], [enable thermometer plugin]), [
+		thermometer_enable=${enableval}
+	])
 
 	if (test "${fortify_enable}" = "yes"); then
 		CFLAGS="$CFLAGS -D_FORTIFY_SOURCE=2"
@@ -327,33 +393,40 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 		AC_DEFINE(HAVE_LIBUSB, 1, [Define to 1 if you have USB library.])
 	fi
 
-	if (test "${capng_enable}" = "yes" && test "${capng_found}" = "yes"); then
-		AC_DEFINE(HAVE_CAPNG, 1, [Define to 1 if you have capabilities library.])
-	fi
-
 	AM_CONDITIONAL(SNDFILE, test "${sndfile_enable}" = "yes" && test "${sndfile_found}" = "yes")
-	AM_CONDITIONAL(NETLINK, test "${netlink_enable}" = "yes" && test "${netlink_found}" = "yes")
 	AM_CONDITIONAL(USB, test "${usb_enable}" = "yes" && test "${usb_found}" = "yes")
-	AM_CONDITIONAL(SBC, test "${alsa_enable}" = "yes" || test "${gstreamer_enable}" = "yes")
+	AM_CONDITIONAL(SBC, test "${alsa_enable}" = "yes" || test "${gstreamer_enable}" = "yes" ||
+									test "${test_enable}" = "yes")
 	AM_CONDITIONAL(ALSA, test "${alsa_enable}" = "yes" && test "${alsa_found}" = "yes")
 	AM_CONDITIONAL(GSTREAMER, test "${gstreamer_enable}" = "yes" && test "${gstreamer_found}" = "yes")
 	AM_CONDITIONAL(AUDIOPLUGIN, test "${audio_enable}" = "yes")
 	AM_CONDITIONAL(INPUTPLUGIN, test "${input_enable}" = "yes")
 	AM_CONDITIONAL(SERIALPLUGIN, test "${serial_enable}" = "yes")
 	AM_CONDITIONAL(NETWORKPLUGIN, test "${network_enable}" = "yes")
+	AM_CONDITIONAL(SAPPLUGIN, test "${sap_enable}" = "yes")
+	AM_CONDITIONAL(PROXIMITYPLUGIN, test "${proximity_enable}" = "yes")
+	AM_CONDITIONAL(TIMEPLUGIN, test "${time_enable}" = "yes")
+	AM_CONDITIONAL(ALERTPLUGIN, test "${alert_enable}" = "yes")
 	AM_CONDITIONAL(SERVICEPLUGIN, test "${service_enable}" = "yes")
-	AM_CONDITIONAL(ECHOPLUGIN, test "no" = "yes")
-	AM_CONDITIONAL(TRACER, test "${tracer_enable}" = "yes")
+	AM_CONDITIONAL(HEALTHPLUGIN, test "${health_enable}" = "yes")
+	AM_CONDITIONAL(MCAP, test "${health_enable}" = "yes")
+	AM_CONDITIONAL(HAL, test "${hal_enable}" = "yes")
+	AM_CONDITIONAL(READLINE, test "${readline_found}" = "yes")
+	AM_CONDITIONAL(GATT_EXAMPLE_PLUGIN, test "${gatt_example_enable}" = "yes")
+	AM_CONDITIONAL(PNATPLUGIN, test "${pnat_enable}" = "yes")
 	AM_CONDITIONAL(HIDD, test "${hidd_enable}" = "yes")
 	AM_CONDITIONAL(PAND, test "${pand_enable}" = "yes")
 	AM_CONDITIONAL(DUND, test "${dund_enable}" = "yes")
 	AM_CONDITIONAL(CUPS, test "${cups_enable}" = "yes")
-	AM_CONDITIONAL(TEST, test "${test_enable}" = "yes")
+	AM_CONDITIONAL(TEST, test "${test_enable}" = "yes" && test "${check_found}" = "yes")
 	AM_CONDITIONAL(TOOLS, test "${tools_enable}" = "yes")
 	AM_CONDITIONAL(BCCMD, test "${bccmd_enable}" = "yes")
 	AM_CONDITIONAL(PCMCIA, test "${pcmcia_enable}" = "yes")
-	AM_CONDITIONAL(HID2HCI, test "${hid2hci_enable}" = "yes" && test "${usb_found}" = "yes")
+	AM_CONDITIONAL(HID2HCI, test "${hid2hci_enable}" = "yes" && test "${usb_found}" = "yes" && test "${udev_found}" = "yes")
 	AM_CONDITIONAL(DFUTOOL, test "${dfutool_enable}" = "yes" && test "${usb_found}" = "yes")
-	AM_CONDITIONAL(UDEVRULES, test "${udevrules_enable}" = "yes")
-	AM_CONDITIONAL(CONFIGFILES, test "${configfiles_enable}" = "yes")
+	AM_CONDITIONAL(DATAFILES, test "${datafiles_enable}" = "yes")
+	AM_CONDITIONAL(MAEMO6PLUGIN, test "${maemo6_enable}" = "yes")
+	AM_CONDITIONAL(DBUSOOBPLUGIN, test "${dbusoob_enable}" = "yes")
+	AM_CONDITIONAL(WIIMOTEPLUGIN, test "${wiimote_enable}" = "yes")
+	AM_CONDITIONAL(THERMOMETERPLUGIN, test "${thermometer_enable}" = "yes")
 ])

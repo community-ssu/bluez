@@ -35,6 +35,7 @@ extern "C" {
 #include <string.h>
 #include <endian.h>
 #include <byteswap.h>
+#include <netinet/in.h>
 
 #ifndef AF_BLUETOOTH
 #define AF_BLUETOOTH	31
@@ -62,6 +63,7 @@ extern "C" {
 #define BT_SECURITY	4
 struct bt_security {
 	uint8_t level;
+	uint8_t key_size;
 };
 #define BT_SECURITY_SDP		0
 #define BT_SECURITY_LOW		1
@@ -69,6 +71,38 @@ struct bt_security {
 #define BT_SECURITY_HIGH	3
 
 #define BT_DEFER_SETUP	7
+
+#define BT_FLUSHABLE	8
+
+#define BT_FLUSHABLE_OFF	0
+#define BT_FLUSHABLE_ON		1
+
+#define BT_CHANNEL_POLICY	10
+
+/* BR/EDR only (default policy)
+ *   AMP controllers cannot be used.
+ *   Channel move requests from the remote device are denied.
+ *   If the L2CAP channel is currently using AMP, move the channel to BR/EDR.
+ */
+#define BT_CHANNEL_POLICY_BREDR_ONLY		0
+
+/* BR/EDR Preferred
+ *   Allow use of AMP controllers.
+ *   If the L2CAP channel is currently on AMP, move it to BR/EDR.
+ *   Channel move requests from the remote device are allowed.
+ */
+#define BT_CHANNEL_POLICY_BREDR_PREFERRED	1
+
+/* AMP Preferred
+ *   Allow use of AMP controllers
+ *   If the L2CAP channel is currently on BR/EDR and AMP controller
+ *     resources are available, initiate a channel move to AMP.
+ *   Channel move requests from the remote device are allowed.
+ *   If the L2CAP socket has not been connected yet, try to create
+ *     and configure the channel directly on an AMP controller rather
+ *     than BR/EDR.
+ */
+#define BT_CHANNEL_POLICY_AMP_PREFERRED		2
 
 /* Connection and socket states */
 enum {
@@ -87,13 +121,17 @@ enum {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
 #define htobs(d)  (d)
 #define htobl(d)  (d)
+#define htobll(d) (d)
 #define btohs(d)  (d)
 #define btohl(d)  (d)
+#define btohll(d) (d)
 #elif __BYTE_ORDER == __BIG_ENDIAN
 #define htobs(d)  bswap_16(d)
 #define htobl(d)  bswap_32(d)
+#define htobll(d) bswap_64(d)
 #define btohs(d)  bswap_16(d)
 #define btohl(d)  bswap_32(d)
+#define btohll(d) bswap_64(d)
 #else
 #error "Unknown byte order"
 #endif
@@ -103,7 +141,7 @@ enum {
 ({						\
 	struct __attribute__((packed)) {	\
 		typeof(*(ptr)) __v;		\
-	} *__p = (void *) (ptr);		\
+	} *__p = (typeof(__p)) (ptr);		\
 	__p->__v;				\
 })
 
@@ -111,9 +149,73 @@ enum {
 do {						\
 	struct __attribute__((packed)) {	\
 		typeof(*(ptr)) __v;		\
-	} *__p = (void *) (ptr);		\
+	} *__p = (typeof(__p)) (ptr);		\
 	__p->__v = (val);			\
 } while(0)
+
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+static inline uint64_t bt_get_le64(const void *ptr)
+{
+	return bt_get_unaligned((const uint64_t *) ptr);
+}
+
+static inline uint64_t bt_get_be64(const void *ptr)
+{
+	return bswap_64(bt_get_unaligned((const uint64_t *) ptr));
+}
+
+static inline uint32_t bt_get_le32(const void *ptr)
+{
+	return bt_get_unaligned((const uint32_t *) ptr);
+}
+
+static inline uint32_t bt_get_be32(const void *ptr)
+{
+	return bswap_32(bt_get_unaligned((const uint32_t *) ptr));
+}
+
+static inline uint16_t bt_get_le16(const void *ptr)
+{
+	return bt_get_unaligned((const uint16_t *) ptr);
+}
+
+static inline uint16_t bt_get_be16(const void *ptr)
+{
+	return bswap_16(bt_get_unaligned((const uint16_t *) ptr));
+}
+#elif __BYTE_ORDER == __BIG_ENDIAN
+static inline uint64_t bt_get_le64(const void *ptr)
+{
+	return bswap_64(bt_get_unaligned((const uint64_t *) ptr));
+}
+
+static inline uint64_t bt_get_be64(const void *ptr)
+{
+	return bt_get_unaligned((const uint64_t *) ptr);
+}
+
+static inline uint32_t bt_get_le32(const void *ptr)
+{
+	return bswap_32(bt_get_unaligned((const uint32_t *) ptr));
+}
+
+static inline uint32_t bt_get_be32(const void *ptr)
+{
+	return bt_get_unaligned((const uint32_t *) ptr);
+}
+
+static inline uint16_t bt_get_le16(const void *ptr)
+{
+	return bswap_16(bt_get_unaligned((const uint16_t *) ptr));
+}
+
+static inline uint16_t bt_get_be16(const void *ptr)
+{
+	return bt_get_unaligned((const uint16_t *) ptr);
+}
+#else
+#error "Unknown byte order"
+#endif
 
 /* BD Address */
 typedef struct {
@@ -152,6 +254,59 @@ void bt_free(void *ptr);
 
 int bt_error(uint16_t code);
 char *bt_compidtostr(int id);
+
+typedef struct {
+	uint8_t data[16];
+} uint128_t;
+
+#if __BYTE_ORDER == __BIG_ENDIAN
+
+#define ntoh64(x) (x)
+
+static inline void ntoh128(const uint128_t *src, uint128_t *dst)
+{
+	memcpy(dst, src, sizeof(uint128_t));
+}
+
+static inline void btoh128(const uint128_t *src, uint128_t *dst)
+{
+	int i;
+
+	for (i = 0; i < 16; i++)
+		dst->data[15 - i] = src->data[i];
+}
+
+#else
+
+static inline uint64_t ntoh64(uint64_t n)
+{
+	uint64_t h;
+	uint64_t tmp = ntohl(n & 0x00000000ffffffff);
+
+	h = ntohl(n >> 32);
+	h |= tmp << 32;
+
+	return h;
+}
+
+static inline void ntoh128(const uint128_t *src, uint128_t *dst)
+{
+	int i;
+
+	for (i = 0; i < 16; i++)
+		dst->data[15 - i] = src->data[i];
+}
+
+static inline void btoh128(const uint128_t *src, uint128_t *dst)
+{
+	memcpy(dst, src, sizeof(uint128_t));
+}
+
+#endif
+
+#define hton64(x)     ntoh64(x)
+#define hton128(x, y) ntoh128(x, y)
+#define htob128(x, y) btoh128(x, y)
 
 #ifdef __cplusplus
 }
