@@ -1,7 +1,7 @@
 AC_PREREQ(2.60)
 AC_INIT(bluez, 4.99)
 
-AM_INIT_AUTOMAKE([foreign subdir-objects color-tests])
+AM_INIT_AUTOMAKE([foreign subdir-objects])
 AM_CONFIG_HEADER(config.h)
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
@@ -70,6 +70,11 @@ if (test -n "${path_systemdunit}"); then
 	AC_SUBST(SYSTEMD_UNITDIR)
 fi
 AM_CONDITIONAL(SYSTEMD, test -n "${path_systemdunit}")
+
+AC_SUBST([srcdir])
+AC_SUBST([builddir])
+AC_SUBST([abs_top_builddir])
+AC_SUBST([abs_top_srcdir])
 
 AC_OUTPUT(Makefile scripts/bluetooth.rules doc/version.xml
 			src/bluetoothd.8 src/bluetooth.service bluez.pc)

@@ -1,0 +1,43 @@
+diff -cr bluez-4.99.aname_init/src/adapter.c bluez-4.99/src/adapter.c
+*** bluez-4.99.aname_init/src/adapter.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99/src/adapter.c	Fri Sep 21 07:44:36 2012
+***************
+*** 2231,2236 ****
+--- 2231,2254 ----
+  	adapter->loaded_drivers = NULL;
+  }
+  
++ /* Fix no BT name initialization with BT device down */
++ static void adaptername_driver_probe()
++ {
++ 	GSList *l;
++ 
++ 	if (adapter_drivers == NULL)
++ 		return;
++ 
++ 	for (l = adapter_drivers; l; l = l->next) {
++ 		struct btd_adapter_driver *driver = l->data;
++ 
++ 		 if (g_strcmp0(driver->name, "adaptername") == 0) {
++ 			 manager_foreach_adapter(probe_driver, driver);
++ 			 break;
++ 		 }
++ 	}
++ }
++ 
+  static void set_mode_complete(struct btd_adapter *adapter)
+  {
+  	struct session_req *pending;
+***************
+*** 2242,2247 ****
+--- 2260,2269 ----
+  	if (adapter->mode == MODE_OFF) {
+  		g_slist_free_full(adapter->mode_sessions, session_free);
+  		adapter->mode_sessions = NULL;
++ 
++ 		/* Fix no BT name initialization with BT device down */
++ 		if (adapter->name == NULL || *adapter->name == '\0')
++ 			adaptername_driver_probe();
+  	}
+  
+  	if (adapter->pending_mode == NULL)

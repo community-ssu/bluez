@@ -487,7 +487,7 @@ scripts/%.rules:
 $(lib_libbluetooth_la_OBJECTS): $(local_headers)
 
 lib/bluetooth/%.h: lib/%.h
-	$(AM_V_at)$(MKDIR_P) lib/bluetooth
+	$(AM_V_at)$(mkdir_p) lib/bluetooth
 	$(AM_V_GEN)$(LN_S) $(abs_top_builddir)/$< $@
 
 clean-local:

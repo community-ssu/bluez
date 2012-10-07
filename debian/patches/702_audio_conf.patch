@@ -1,0 +1,37 @@
+diff -cr audio/audio.conf audio/audio.conf
+*** audio/audio.conf	Sat Jun 16 06:00:37 2012
+--- audio/audio.conf	Sat Jun 16 06:03:28 2012
+***************
+*** 7,14 ****
+--- 7,20 ----
+  # Switch to master role for incoming connections (defaults to true)
+  Master=true
+  
++ # If we want to enable support for specific services
++ # Defaults to supporting all implemented services
++ # except Gateway,Socket,Source
++ Enable=Gateway,Socket,Source
++ 
+  # If we want to disable support for specific services
+  # Defaults to supporting all implemented services
++ # except Gateway,Socket,Source
+  #Disable=Control,Source
+  
+  # SCO routing. Either PCM or HCI (in which case audio is routed to/from ALSA)
+***************
+*** 19,25 ****
+  # connections. Some headsets that support both profiles will only connect the
+  # other one automatically so the default setting of true is usually a good
+  # idea.
+! #AutoConnect=true
+  
+  # Headset interface specific options (i.e. options which affect how the audio
+  # service interacts with remote headset devices)
+--- 25,31 ----
+  # connections. Some headsets that support both profiles will only connect the
+  # other one automatically so the default setting of true is usually a good
+  # idea.
+! AutoConnect=true
+  
+  # Headset interface specific options (i.e. options which affect how the audio
+  # service interacts with remote headset devices)

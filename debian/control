@@ -1,7 +1,8 @@
 Source: bluez
 Section: admin
 Priority: optional
-Maintainer: Johan Hedberg <johan.hedberg@nokia.com>
+Maintainer: Ludek Finstrle <luf@pzkagis.cz>
+XSBC-Original-Maintainer: Debian Bluetooth Maintainers <pkg-bluetooth-maintainers@lists.alioth.debian.org>
 Build-Depends: debhelper (>= 5.0), autotools-dev, cdbs, libdbus-1-dev, libglib2.0-dev, libasound2-dev, libgstreamer-plugins-base0.10-dev, upstart-dev
 Standards-Version: 3.7.2
 

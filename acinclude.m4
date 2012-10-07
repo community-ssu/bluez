@@ -119,8 +119,8 @@ AC_DEFUN([AC_PATH_GLIB], [
 ])
 
 AC_DEFUN([AC_PATH_GSTREAMER], [
-	PKG_CHECK_MODULES(GSTREAMER, gstreamer-0.10 >= 0.10.30 gstreamer-plugins-base-0.10, gstreamer_found=yes,
-				AC_MSG_WARN(GStreamer library version 0.10.30 or later is required);gstreamer_found=no)
+	PKG_CHECK_MODULES(GSTREAMER, gstreamer-0.10 >= 0.10.25 gstreamer-plugins-base-0.10, gstreamer_found=yes,
+				AC_MSG_WARN(GStreamer library version 0.10.25 or later is required);gstreamer_found=no)
 	AC_SUBST(GSTREAMER_CFLAGS)
 	AC_SUBST(GSTREAMER_LIBS)
 	GSTREAMER_PLUGINSDIR=`$PKG_CONFIG --variable=pluginsdir gstreamer-0.10`
@@ -220,6 +220,8 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 	dbusoob_enable=no
 	wiimote_enable=no
 	thermometer_enable=no
+	monitor_enable=no
+	emulator_enable=no
 
 	AC_ARG_ENABLE(optimization, AC_HELP_STRING([--disable-optimization], [disable code optimization]), [
 		optimization_enable=${enableval}
@@ -372,6 +374,14 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 		thermometer_enable=${enableval}
 	])
 
+	AC_ARG_ENABLE(monitor, AC_HELP_STRING([--enable-monitor], [enable monitor]), [
+		monitor_enable=${enableval}
+	])
+
+	AC_ARG_ENABLE(emulator, AC_HELP_STRING([--enable-emulator], [enable emulator]), [
+		emulator_enable=${enableval}
+	])
+
 	if (test "${fortify_enable}" = "yes"); then
 		CFLAGS="$CFLAGS -D_FORTIFY_SOURCE=2"
 	fi
@@ -429,4 +439,6 @@ AC_DEFUN([AC_ARG_BLUEZ], [
 	AM_CONDITIONAL(DBUSOOBPLUGIN, test "${dbusoob_enable}" = "yes")
 	AM_CONDITIONAL(WIIMOTEPLUGIN, test "${wiimote_enable}" = "yes")
 	AM_CONDITIONAL(THERMOMETERPLUGIN, test "${thermometer_enable}" = "yes")
+	AM_CONDITIONAL(MONITOR, test "${monitor_enable}" = "yes")
+	AM_CONDITIONAL(EMULATOR, test "${emulator_enable}" = "yes" && test "${monitor_enable}" = "yes")
 ])

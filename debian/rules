@@ -6,19 +6,27 @@ include /usr/share/cdbs/1/rules/debhelper.mk
 include /usr/share/cdbs/1/rules/simple-patchsys.mk
 include /usr/share/cdbs/1/class/autotools.mk
 
+CFLAGS += -mfloat-abi=softfp
+
+ifneq (,$(findstring thumb,$(DEB_BUILD_OPTIONS)))
+	CFLAGS += -mfpu=neon -mthumb
+endif
+
 DEB_SHLIBDEPS_INCLUDE_libbluetooth3 = debian/libbluetooth3/usr/lib
 
 DEB_UPDATE_RCD_PARAMS_bluez = "start 56 2 3 4 . stop 74 0 1 5 6 ."
 
 DEB_DH_INSTALLINIT_ARGS = --name=bluetooth
 
-DEB_CONFIGURE_EXTRA_FLAGS := --enable-test --enable-bccmd --enable-configfiles \
+DEB_CONFIGURE_EXTRA_FLAGS := --enable-test --enable-bccmd --enable-datafiles \
 				--enable-hidd --enable-alsa --enable-gstreamer \
 				--enable-audio --enable-input --enable-dund \
 				--enable-pand --enable-network --enable-serial \
-				--disable-manpages --disable-pcmcia-rules \
+				--enable-dbusoob --enable-wiimote --enable-pnat \
+				--enable-proximity --enable-time --enable-alert \
+				--disable-hal --disable-pcmcia \
 				--disable-usb --disable-hid2hci --disable-cups \
-				--disable-pie --with-telephony=maemo
+				--disable-pie --with-telephony=maemo5
 
 install/bluez::
 	install -D -m 0644 audio/audio.conf $(DEB_DESTDIR)/etc/bluetooth/audio.conf
@@ -39,3 +47,7 @@ install/bluez-test::
 binary-install/bluez::
 	dh_installupstart --init-script=bluetoothd
 	dh_installdocs --package=bluez-doc
+
+makebuilddir/bluez::
+	chmod a+x ./autogen.sh
+	ACLOCAL=aclocal-1.9 AUTOMAKE=automake-1.9 ./autogen.sh

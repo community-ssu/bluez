@@ -49,11 +49,12 @@ tools_ppporc_LDADD = lib/libbluetooth-private.la
 
 tools_hcieventmask_LDADD = lib/libbluetooth-private.la
 
-noinst_PROGRAMS += mgmt/btmgmt monitor/btmon emulator/btvirt
+noinst_PROGRAMS += mgmt/btmgmt
 
 mgmt_btmgmt_SOURCES = mgmt/main.c src/glib-helper.c
 mgmt_btmgmt_LDADD = lib/libbluetooth-private.la @GLIB_LIBS@
 
+if MONITOR
 monitor_btmon_SOURCES = monitor/main.c monitor/bt.h \
 					monitor/mainloop.h monitor/mainloop.c \
 					monitor/hcidump.h monitor/hcidump.c \
@@ -61,12 +62,17 @@ monitor_btmon_SOURCES = monitor/main.c monitor/bt.h \
 					monitor/control.h monitor/control.c \
 					monitor/packet.h monitor/packet.c
 monitor_btmon_LDADD = lib/libbluetooth-private.la
+noinst_PROGRAMS += monitor/btmon
+endif
 
+if EMULATOR
 emulator_btvirt_SOURCES = emulator/main.c monitor/bt.h \
 					monitor/mainloop.h monitor/mainloop.c \
 					emulator/server.h emulator/server.c \
 					emulator/vhci.h emulator/vhci.c \
 					emulator/btdev.h emulator/btdev.c
+noinst_PROGRAMS += emulator/btvirt
+endif
 
 if READLINE
 bin_PROGRAMS += attrib/gatttool
@@ -157,7 +163,9 @@ endif
 
 
 if TEST
+if EMULATOR
 sbin_PROGRAMS += test/hciemu
+endif
 
 bin_PROGRAMS += test/l2test test/rctest
 
@@ -173,6 +181,7 @@ test_l2test_LDADD = lib/libbluetooth-private.la
 
 test_rctest_LDADD = lib/libbluetooth-private.la
 
+test_gaptest_SOURCES = test/gaptest.c
 test_gaptest_LDADD = @DBUS_LIBS@
 
 test_sdptest_LDADD = lib/libbluetooth-private.la
