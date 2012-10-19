@@ -1,0 +1,121 @@
+diff -cr plugins/pnat.c plugins/pnat.c
+*** plugins/pnat.c	Wed Sep  8 11:27:53 2010
+--- plugins/pnat.c	Sun Oct  7 12:31:18 2012
+***************
+*** 51,57 ****
+  #include "log.h"
+  
+  /* FIXME: This location should be build-time configurable */
+! #define PNATD "/usr/bin/phonet-at"
+  
+  #define DUN_CHANNEL 1
+  #define DUN_UUID "00001103-0000-1000-8000-00805F9B34FB"
+--- 51,57 ----
+  #include "log.h"
+  
+  /* FIXME: This location should be build-time configurable */
+! #define PNATD "/usr/bin/pnatd"
+  
+  #define DUN_CHANNEL 1
+  #define DUN_UUID "00001103-0000-1000-8000-00805F9B34FB"
+***************
+*** 65,71 ****
+  	GIOChannel *io;	/* Client socket */
+  	guint io_watch;	/* Client IO watch id */
+  
+- 	guint tty_timer;
+  	int tty_tries;
+  	gboolean tty_open;
+  	int tty_id;
+--- 65,70 ----
+***************
+*** 108,118 ****
+  		client->pnatd_pid = 0;
+  	}
+  
+- 	if (client->tty_timer > 0) {
+- 		g_source_remove(client->tty_timer);
+- 		client->tty_timer = 0;
+- 	}
+- 
+  	if (client->tty_id >= 0) {
+  		struct rfcomm_dev_req req;
+  
+--- 107,112 ----
+***************
+*** 200,222 ****
+  	struct dun_client *client = &server->client;
+  	int tty_fd;
+  
+! 	tty_fd = open(client->tty_name, O_RDONLY | O_NOCTTY);
+! 	if (tty_fd < 0) {
+! 		if (errno == EACCES)
+! 			goto disconnect;
+  
+! 		client->tty_tries--;
+! 
+! 		if (client->tty_tries <= 0)
+  			goto disconnect;
+  
+! 		return TRUE;
+  	}
+  
+  	DBG("%s created for DUN", client->tty_name);
+  
+  	client->tty_open = TRUE;
+- 	client->tty_timer = 0;
+  
+  	g_io_channel_unref(client->io);
+  	g_source_remove(client->io_watch);
+--- 194,218 ----
+  	struct dun_client *client = &server->client;
+  	int tty_fd;
+  
+! 	for (; client->tty_tries > 0; client->tty_tries--) {
+! 		tty_fd = open(client->tty_name, O_RDONLY | O_NOCTTY);
+! 		if (tty_fd >= 0)
+! 			goto create;
+  
+! 		if (errno == EACCES)
+  			goto disconnect;
+  
+! 		usleep(TTY_TIMEOUT * 1000);
+  	}
+  
++ disconnect:
++ 	disconnect(server);
++ 	return FALSE;
++ 
++ create:
+  	DBG("%s created for DUN", client->tty_name);
+  
+  	client->tty_open = TRUE;
+  
+  	g_io_channel_unref(client->io);
+  	g_source_remove(client->io_watch);
+***************
+*** 230,240 ****
+  		goto disconnect;
+  
+  	return FALSE;
+- 
+- disconnect:
+- 	client->tty_timer = 0;
+- 	disconnect(server);
+- 	return FALSE;
+  }
+  
+  static gboolean create_tty(struct dun_server *server)
+--- 226,231 ----
+***************
+*** 266,274 ****
+  	client->tty_tries = TTY_TRIES;
+  
+  	tty_try_open(server);
+- 	if (!client->tty_open && client->tty_tries > 0)
+- 		client->tty_timer = g_timeout_add(TTY_TIMEOUT,
+- 							tty_try_open, server);
+  
+  	return TRUE;
+  }
+--- 257,262 ----
