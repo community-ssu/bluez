@@ -1,0 +1,66 @@
+author	Elvis Pfützenreuter <epx@signove.com
+commit	3bbf48117999e8a6775e64a047c34d9e86cbee15
+	Wed, 28 Mar 2012 09:38:33 +0000 (12:38 +0300)
+
+HDP: Omit MainChannel when first reliable channel is nil
+
+Do not add MainChannel to property list when HDP first reliable channel
+does not exist. Upon channel destruction, ChannelDeleted signal is already
+emitted.
+
+This also fixes a crash where MainChannel was filled with invalid path ""
+when first reliable channel did not exist.
+
+diff -cr bluez-4.99.pan.orig/health/hdp.c bluez-4.99.pan/health/hdp.c
+*** bluez-4.99.pan.orig/health/hdp.c	Wed Jan 11 17:44:59 2012
+--- bluez-4.99.pan/health/hdp.c	Fri Oct 12 08:23:13 2012
+***************
+*** 723,736 ****
+  					DBUS_TYPE_INVALID);
+  
+  	if (hdp_chan == dev->fr) {
+- 		char *empty_path;
+- 
+  		hdp_channel_unref(dev->fr);
+  		dev->fr = NULL;
+- 		empty_path = "/";
+- 		emit_property_changed(dev->conn, device_get_path(dev->dev),
+- 					HEALTH_DEVICE, "MainChannel",
+- 					DBUS_TYPE_OBJECT_PATH, &empty_path);
+  	}
+  
+  end:
+--- 723,730 ----
+***************
+*** 2061,2067 ****
+  	struct hdp_device *device = user_data;
+  	DBusMessageIter iter, dict;
+  	DBusMessage *reply;
+- 	char *path;
+  
+  	reply = dbus_message_new_method_return(msg);
+  	if (reply == NULL)
+--- 2055,2060 ----
+***************
+*** 2075,2085 ****
+  			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &dict);
+  
+  	if (device->fr != NULL)
+! 		path = g_strdup(device->fr->path);
+! 	else
+! 		path = g_strdup("");
+! 	dict_append_entry(&dict, "MainChannel", DBUS_TYPE_OBJECT_PATH, &path);
+! 	g_free(path);
+  	dbus_message_iter_close_container(&iter, &dict);
+  
+  	return reply;
+--- 2068,2076 ----
+  			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &dict);
+  
+  	if (device->fr != NULL)
+! 		dict_append_entry(&dict, "MainChannel", DBUS_TYPE_OBJECT_PATH,
+! 							&device->fr->path);
+! 
+  	dbus_message_iter_close_container(&iter, &dict);
+  
+  	return reply;

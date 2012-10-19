@@ -1,0 +1,29 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	f763bc0cd82a49854dd13f702383c9bdebc8178b
+	Thu, 26 Apr 2012 06:40:36 +0000 (09:40 +0300)
+
+hciops: Fix event mask for Inquiry Result with RSSI
+
+The right value is 0x02 and not 0x04 (which is "Read Remote Extended
+Features Complete").
+
+diff -cr bluez-4.99.pan.orig/plugins/hciops.c bluez-4.99.pan/plugins/hciops.c
+*** bluez-4.99.pan.orig/plugins/hciops.c	Mon Oct 15 05:16:52 2012
+--- bluez-4.99.pan/plugins/hciops.c	Mon Oct 15 05:26:42 2012
+***************
+*** 565,571 ****
+  	}
+  
+  	if (dev->features[3] & LMP_RSSI_INQ)
+! 		events[4] |= 0x04; /* Inquiry Result with RSSI */
+  
+  	if (dev->features[5] & LMP_SNIFF_SUBR)
+  		events[5] |= 0x20; /* Sniff Subrating */
+--- 565,571 ----
+  	}
+  
+  	if (dev->features[3] & LMP_RSSI_INQ)
+! 		events[4] |= 0x02; /* Inquiry Result with RSSI */
+  
+  	if (dev->features[5] & LMP_SNIFF_SUBR)
+  		events[5] |= 0x20; /* Sniff Subrating */

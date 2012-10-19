@@ -1,0 +1,106 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	f732bbf978711c65ae374a9be1f15dd3952f8b80
+	Tue, 13 Mar 2012 13:53:07 +0000 (15:53 +0200)
+
+audio: fix missing unref in case of error
+
+audio_adapter_get() increases the reference counter of the adapter, so
+it's necessary to decrement it in case of error.
+
+diff -cr bluez-4.99.pan.orig/audio/manager.c bluez-4.99.pan/audio/manager.c
+*** bluez-4.99.pan.orig/audio/manager.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/audio/manager.c	Fri Oct 12 07:40:06 2012
+***************
+*** 964,975 ****
+  static int gateway_server_probe(struct btd_adapter *adapter)
+  {
+  	struct audio_adapter *adp;
+  
+  	adp = audio_adapter_get(adapter);
+  	if (!adp)
+  		return -EINVAL;
+  
+! 	return gateway_server_init(adp);
+  }
+  
+  static void gateway_server_remove(struct btd_adapter *adapter)
+--- 964,980 ----
+  static int gateway_server_probe(struct btd_adapter *adapter)
+  {
+  	struct audio_adapter *adp;
++ 	int err;
+  
+  	adp = audio_adapter_get(adapter);
+  	if (!adp)
+  		return -EINVAL;
+  
+! 	err = gateway_server_init(adp);
+! 	if (err < 0)
+! 		audio_adapter_unref(adp);
+! 
+! 	return err;
+  }
+  
+  static void gateway_server_remove(struct btd_adapter *adapter)
+***************
+*** 1040,1045 ****
+--- 1045,1051 ----
+  	struct audio_adapter *adp;
+  	const gchar *path = adapter_get_path(adapter);
+  	bdaddr_t src;
++ 	int err;
+  
+  	DBG("path %s", path);
+  
+***************
+*** 1049,1055 ****
+  
+  	adapter_get_address(adapter, &src);
+  
+! 	return avrcp_register(connection, &src, config);
+  }
+  
+  static void avrcp_server_remove(struct btd_adapter *adapter)
+--- 1055,1065 ----
+  
+  	adapter_get_address(adapter, &src);
+  
+! 	err = avrcp_register(connection, &src, config);
+! 	if (err < 0)
+! 		audio_adapter_unref(adp);
+! 
+! 	return err;
+  }
+  
+  static void avrcp_server_remove(struct btd_adapter *adapter)
+***************
+*** 1074,1079 ****
+--- 1084,1090 ----
+  	struct audio_adapter *adp;
+  	const gchar *path = adapter_get_path(adapter);
+  	bdaddr_t src;
++ 	int err;
+  
+  	DBG("path %s", path);
+  
+***************
+*** 1083,1089 ****
+  
+  	adapter_get_address(adapter, &src);
+  
+! 	return media_register(connection, path, &src);
+  }
+  
+  static void media_server_remove(struct btd_adapter *adapter)
+--- 1094,1104 ----
+  
+  	adapter_get_address(adapter, &src);
+  
+! 	err = media_register(connection, path, &src);
+! 	if (err < 0)
+! 		audio_adapter_unref(adp);
+! 
+! 	return err;
+  }
+  
+  static void media_server_remove(struct btd_adapter *adapter)

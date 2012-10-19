@@ -1,0 +1,58 @@
+author	Arek Lichwa <Arkadiusz.Lichwa@tieto.com>
+commit	cbd2b1348ba88667b5b02cb197170a21ba4d4ae9
+	Wed, 23 May 2012 14:29:36 +0000 (17:29 +0300)
+
+sdp/build: Build fails when SDP_DEBUG enabled
+
+Enabling SDP_DEBUG prevents build to be done.
+
+diff -cr bluez-4.99.pan.orig/lib/sdp.c bluez-4.99.pan/lib/sdp.c
+*** bluez-4.99.pan.orig/lib/sdp.c	Mon Oct 15 05:05:06 2012
+--- bluez-4.99.pan/lib/sdp.c	Mon Oct 15 08:16:52 2012
+***************
+*** 1387,1393 ****
+  
+  	SDPDBG("=====================================\n");
+  	SDPDBG("ATTRIBUTE IDENTIFIER : 0x%x\n",  d->attrId);
+! 	SDPDBG("ATTRIBUTE VALUE PTR : 0x%x\n", (uint32_t)value);
+  	if (d)
+  		sdp_data_print(d);
+  	else
+--- 1387,1393 ----
+  
+  	SDPDBG("=====================================\n");
+  	SDPDBG("ATTRIBUTE IDENTIFIER : 0x%x\n",  d->attrId);
+! 	SDPDBG("ATTRIBUTE VALUE PTR : %p\n", value);
+  	if (d)
+  		sdp_data_print(d);
+  	else
+***************
+*** 3411,3417 ****
+  		scanned += sizeof(uint16_t);
+  		pdata_len -= sizeof(uint16_t);
+  
+- 		SDPDBG("Total svc count: %d\n", total_rec_count);
+  		SDPDBG("Current svc count: %d\n", rec_count);
+  		SDPDBG("ResponseLength: %d\n", rsplen);
+  
+--- 3411,3416 ----
+diff -cr bluez-4.99.pan.orig/src/sdpd-request.c bluez-4.99.pan/src/sdpd-request.c
+*** bluez-4.99.pan.orig/src/sdpd-request.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/sdpd-request.c	Mon Oct 15 08:17:59 2012
+***************
+*** 1037,1043 ****
+  	if (send(req->sock, rsp.data, rsp.data_size, 0) < 0)
+  		error("send: %s (%d)", strerror(errno), errno);
+  
+! 	SDPDBG("Bytes Sent : %d", sent);
+  
+  	free(rsp.data);
+  	free(req->buf);
+--- 1037,1043 ----
+  	if (send(req->sock, rsp.data, rsp.data_size, 0) < 0)
+  		error("send: %s (%d)", strerror(errno), errno);
+  
+! 	SDPDBG("Bytes Sent : %d", rsp.data_size);
+  
+  	free(rsp.data);
+  	free(req->buf);

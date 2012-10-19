@@ -1,0 +1,33 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	f267a12c348f15f7bf7792bc6b66314c898d1ded
+	Tue, 19 Jun 2012 10:40:49 +0000 (13:40 +0300)
+
+adapter: Change not-connected authorization error to a warning
+
+Due to scheduling/timing on some kernels it is possible that the device
+connected event through mgmt comes slightly after an L2CAP socket
+receives the same event. We should try to fix this on the kernel side
+but as this check in user space is not protecting against critical
+errors but just potential profile bugs it can be changed to a simple
+warning message.
+
+diff -cr bluez-4.99.pan.orig/src/adapter.c bluez-4.99.pan/src/adapter.c
+*** bluez-4.99.pan.orig/src/adapter.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/adapter.c	Tue Oct 16 10:43:12 2012
+***************
+*** 3075,3081 ****
+  
+  	/* Device connected? */
+  	if (!g_slist_find(adapter->connections, device))
+! 		return -ENOTCONN;
+  
+  	if (adapter->auth_idle_id)
+  		return -EBUSY;
+--- 3075,3081 ----
+  
+  	/* Device connected? */
+  	if (!g_slist_find(adapter->connections, device))
+! 		error("Authorization request for non-connected device!?");
+  
+  	if (adapter->auth_idle_id)
+  		return -EBUSY;

@@ -1,0 +1,204 @@
+author	Tomasz Bursztyka <tomasz.bursztyka@linux.intel.com>
+commit	8e06bb2e87ddadfc7a2d01a80215d86bf84f9f19
+	Fri, 24 Aug 2012 07:49:19 +0000 (10:49 +0300)
+
+network: Keep track of session's interface name in server
+
+author	Tomasz Bursztyka <tomasz.bursztyka@linux.intel.com>
+commit	885c7a816378988edae06566c4f7bb6a097e2ce5
+	Fri, 24 Aug 2012 07:49:19 +0000 (10:49 +0300)
+
+network: Add helper function to remove an interface from a bridge
+
+author	Tomasz Bursztyka <tomasz.bursztyka@linux.intel.com>
+commit	2eb17e7e36337ef305119f40de6de1d519c33668
+	Fri, 24 Aug 2012 07:49:19 +0000 (10:49 +0300)
+
+network: Release session's interface from bridge when unregistering
+
+author	Tomasz Bursztyka <tomasz.bursztyka@linux.intel.com>
+commit	bd9810f23d67e45395749478621fb461820bf504
+	Fri, 24 Aug 2012 07:49:19 +0000 (10:49 +0300)
+
+network: Kill underlying session's connection before freeing it
+
+author	Tomasz Bursztyka <tomasz.bursztyka@linux.intel.com>
+commit	889b97e685354811553ff05132957eb31eea8b4a
+	Fri, 24 Aug 2012 07:49:20 +0000 (10:49 +0300)
+
+network: Remove sessions from server on DBus call Unregister
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	b809cae2368e5ad0bed46e9be7afef99fed80786
+	Fri, 24 Aug 2012 07:49:20 +0000 (10:49 +0300)
+
+network: Fix warning when removing connection timeout handler
+
+The source should only be removed once as it can cause the following
+warning:
+
+GLib-CRITICAL **: g_source_remove: assertion `tag > 0' failed
+
+diff -cr bluez-4.99.pan.orig/network/common.c bluez-4.99.pan/network/common.c
+*** bluez-4.99.pan.orig/network/common.c	Fri Oct 12 06:46:57 2012
+--- bluez-4.99.pan/network/common.c	Tue Oct 16 17:55:03 2012
+***************
+*** 267,269 ****
+--- 267,300 ----
+  
+  	return 0;
+  }
++ 
++ int bnep_del_from_bridge(const char *devname, const char *bridge)
++ {
++ 	int ifindex;
++ 	struct ifreq ifr;
++ 	int sk, err;
++ 
++ 	if (!devname || !bridge)
++ 		return -EINVAL;
++ 
++ 	ifindex = if_nametoindex(devname);
++ 
++ 	sk = socket(AF_INET, SOCK_STREAM, 0);
++ 	if (sk < 0)
++ 		return -1;
++ 
++ 	memset(&ifr, 0, sizeof(ifr));
++ 	strncpy(ifr.ifr_name, bridge, IFNAMSIZ - 1);
++ 	ifr.ifr_ifindex = ifindex;
++ 
++ 	err = ioctl(sk, SIOCBRDELIF, &ifr);
++ 
++ 	close(sk);
++ 
++ 	if (err < 0)
++ 		return err;
++ 
++ 	info("bridge %s: interface %s removed", bridge, devname);
++ 
++ 	return 0;
++ }
+diff -cr bluez-4.99.pan.orig/network/common.h bluez-4.99.pan/network/common.h
+*** bluez-4.99.pan.orig/network/common.h	Tue Jul 13 03:08:59 2010
+--- bluez-4.99.pan/network/common.h	Tue Oct 16 17:55:31 2012
+***************
+*** 40,42 ****
+--- 40,43 ----
+  int bnep_if_up(const char *devname);
+  int bnep_if_down(const char *devname);
+  int bnep_add_to_bridge(const char *devname, const char *bridge);
++ int bnep_del_from_bridge(const char *devname, const char *bridge);
+diff -cr bluez-4.99.pan.orig/network/connection.c bluez-4.99.pan/network/connection.c
+*** bluez-4.99.pan.orig/network/connection.c	Fri Oct 12 07:05:06 2012
+--- bluez-4.99.pan/network/connection.c	Tue Oct 16 17:56:41 2012
+***************
+*** 212,219 ****
+  	if (cond & G_IO_NVAL)
+  		return FALSE;
+  
+! 	g_source_remove(nc->timeout_source);
+! 	nc->timeout_source = 0;
+  
+  	if (cond & (G_IO_HUP | G_IO_ERR)) {
+  		error("Hangup or error on l2cap server socket");
+--- 212,221 ----
+  	if (cond & G_IO_NVAL)
+  		return FALSE;
+  
+! 	if (nc->timeout_source > 0) {
+! 		g_source_remove(nc->timeout_source);
+! 		nc->timeout_source = 0;
+! 	}
+  
+  	if (cond & (G_IO_HUP | G_IO_ERR)) {
+  		error("Hangup or error on l2cap server socket");
+diff -cr bluez-4.99.pan.orig/network/server.c bluez-4.99.pan/network/server.c
+*** bluez-4.99.pan.orig/network/server.c	Fri Oct 12 06:54:42 2012
+--- bluez-4.99.pan/network/server.c	Tue Oct 16 17:52:27 2012
+***************
+*** 57,62 ****
+--- 57,63 ----
+  /* Pending Authorization */
+  struct network_session {
+  	bdaddr_t	dst;		/* Remote Bluetooth Address */
++ 	char		dev[16];	/* Interface name */
+  	GIOChannel	*io;		/* Pending connect channel */
+  	guint		watch;		/* BNEP socket watch */
+  };
+***************
+*** 286,291 ****
+--- 287,294 ----
+  
+  	bnep_if_up(devname);
+  
++ 	strncpy(session->dev, devname, sizeof(devname));
++ 
+  	ns->sessions = g_slist_append(ns->sessions, session);
+  
+  	return 0;
+***************
+*** 599,608 ****
+--- 602,634 ----
+  	return record->handle;
+  }
+  
++ static void server_remove_sessions(struct network_server *ns)
++ {
++ 	GSList *list;
++ 
++ 	for (list = ns->sessions; list; list = list->next) {
++ 		struct network_session *session = list->data;
++ 
++ 		if (*session->dev == '\0')
++ 			continue;
++ 
++ 		bnep_del_from_bridge(session->dev, ns->bridge);
++ 		bnep_if_down(session->dev);
++ 
++ 		bnep_kill_connection(&session->dst);
++ 	}
++ 
++ 	g_slist_free_full(ns->sessions, session_free);
++ 
++ 	ns->sessions = NULL;
++ }
++ 
+  static void server_disconnect(DBusConnection *conn, void *user_data)
+  {
+  	struct network_server *ns = user_data;
+  
++ 	server_remove_sessions(ns);
++ 
+  	ns->watch_id = 0;
+  
+  	if (ns->record_id) {
+***************
+*** 691,697 ****
+  	if (!ns)
+  		return;
+  
+! 	/* FIXME: Missing release/free all bnepX interfaces */
+  	if (ns->record_id)
+  		remove_record_from_server(ns->record_id);
+  
+--- 717,724 ----
+  	if (!ns)
+  		return;
+  
+! 	server_remove_sessions(ns);
+! 
+  	if (ns->record_id)
+  		remove_record_from_server(ns->record_id);
+  
+***************
+*** 699,706 ****
+  	g_free(ns->name);
+  	g_free(ns->bridge);
+  
+- 	g_slist_free_full(ns->sessions, session_free);
+- 
+  	g_free(ns);
+  }
+  
+--- 726,731 ----

@@ -1,0 +1,26 @@
+author	Michael Brudevold <michael.brudevold@logicpd.com>
+commit	2755200dcc9667fda16f0506bd3c7d6028076015
+	Tue, 27 Mar 2012 11:51:43 +0000 (14:51 +0300)
+
+avdtp: fix audio source init check
+
+diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
+*** bluez-4.99.pan.orig/audio/avdtp.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/audio/avdtp.c	Fri Oct 12 08:19:52 2012
+***************
+*** 1520,1526 ****
+  	case AVDTP_SEP_TYPE_SINK:
+  		if (!dev->source) {
+  			btd_device_add_uuid(dev->btd_dev, A2DP_SOURCE_UUID);
+! 			if (!dev->sink) {
+  				error("Unable to get a audio source object");
+  				err = AVDTP_BAD_STATE;
+  				goto failed;
+--- 1520,1526 ----
+  	case AVDTP_SEP_TYPE_SINK:
+  		if (!dev->source) {
+  			btd_device_add_uuid(dev->btd_dev, A2DP_SOURCE_UUID);
+! 			if (!dev->source) {
+  				error("Unable to get a audio source object");
+  				err = AVDTP_BAD_STATE;
+  				goto failed;

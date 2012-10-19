@@ -1,0 +1,24 @@
+author	Lucas De Marchi <lucas.demarchi@profusion.mobi>
+commit	aec64042be2dc3ee0a7c655c68306efec9fdd990
+	Fri, 18 May 2012 03:32:21 +0000 (20:32 -0700)
+
+adapter: do not check signature twice
+
+Message signature is already checked in generic_message(), so there's no
+need to check again in the callback.
+
+diff -cr bluez-4.99.pan.orig/src/adapter.c bluez-4.99.pan/src/adapter.c
+*** bluez-4.99.pan.orig/src/adapter.c	Mon Oct 15 05:21:06 2012
+--- bluez-4.99.pan/src/adapter.c	Mon Oct 15 07:49:45 2012
+***************
+*** 1321,1329 ****
+  	DBusMessageIter array_iter;
+  	const gchar *dev_path;
+  
+- 	if (!dbus_message_has_signature(msg, DBUS_TYPE_INVALID_AS_STRING))
+- 		return btd_error_invalid_args(msg);
+- 
+  	reply = dbus_message_new_method_return(msg);
+  	if (!reply)
+  		return NULL;
+--- 1321,1326 ----

@@ -1,0 +1,75 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	3424dc81ef8c5c83a78cf3e0cd6c38f075f44fce
+	Mon, 16 Apr 2012 19:55:42 +0000 (22:55 +0300)
+
+eir: Fix incorrect eir_length() parsing
+
+Issue:
+The COD value displayed via dbus during inquiry is wrong.
+This is because of the incorrect return length of the eir_length(),
+which leads to appending the COD at wrong location.
+
+Analysis:
+After appending the COD at the end of the eir data, we can see
+there are some '00' present in the eir field length in the eir file.
+XX:XX:XX:XX:XX:XX 07095359414D5043020A040B0312111F110C110E110311
+0000000000000000000000040D000142
+
+Fix:
+Corrected the length calculation in eir_length(), which is determining,
+which position the COD should append
+
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	bae8dc7356756927c478f5fff28453bed481471f
+	Mon, 16 Apr 2012 19:55:54 +0000 (22:55 +0300)
+
+eir: Fix incorrect eir_has_data_type() parsing
+
+Updating the "parsed" variable twice inside the for loop, leads to
+incorrect parsing.
+
+diff -cr bluez-4.99.pan.orig/src/eir.c bluez-4.99.pan/src/eir.c
+*** bluez-4.99.pan.orig/src/eir.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/eir.c	Mon Oct 15 05:07:50 2012
+***************
+*** 337,345 ****
+  gboolean eir_has_data_type(uint8_t *data, size_t len, uint8_t type)
+  {
+  	uint8_t field_len;
+! 	size_t parsed;
+  
+! 	for (parsed = 0; parsed < len - 1; parsed += field_len) {
+  		field_len = data[0];
+  
+  		if (field_len == 0)
+--- 337,345 ----
+  gboolean eir_has_data_type(uint8_t *data, size_t len, uint8_t type)
+  {
+  	uint8_t field_len;
+! 	size_t parsed = 0;
+  
+! 	while (parsed < len - 1) {
+  		field_len = data[0];
+  
+  		if (field_len == 0)
+***************
+*** 373,381 ****
+  size_t eir_length(uint8_t *eir, size_t maxlen)
+  {
+  	uint8_t field_len;
+! 	size_t parsed, length;
+  
+! 	for (parsed = 0, length = 0; parsed < maxlen - 1; parsed += field_len) {
+  		field_len = eir[0];
+  
+  		if (field_len == 0)
+--- 373,381 ----
+  size_t eir_length(uint8_t *eir, size_t maxlen)
+  {
+  	uint8_t field_len;
+! 	size_t parsed = 0, length = 0;
+  
+! 	while (parsed < maxlen - 1) {
+  		field_len = eir[0];
+  
+  		if (field_len == 0)

@@ -1,0 +1,48 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	f9b4a114e574b4fa41576edcb64608ba3616ff83
+	Fri, 13 Apr 2012 09:36:31 +0000 (12:36 +0300)
+
+agent: Free the agent request properly
+
+In the case of error, Unref the req->msg which is allocated inside the
+pincode_request_new()
+
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	822285d9cee26f7699b720b6d507a51f1c294d13
+	Fri, 13 Apr 2012 09:43:24 +0000 (12:43 +0300)
+
+agent: Fix double D-Bus message unref
+
+Inside the g_dbus_send_message() we are already doing the
+D-BUS message unref.
+
+diff -cr bluez-4.99.pan.orig/src/agent.c bluez-4.99.pan/src/agent.c
+*** bluez-4.99.pan.orig/src/agent.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/agent.c	Mon Oct 15 04:13:19 2012
+***************
+*** 456,462 ****
+  	return 0;
+  
+  failed:
+! 	g_free(req);
+  	return err;
+  }
+  
+--- 456,462 ----
+  	return 0;
+  
+  failed:
+! 	agent_request_free(req, FALSE);
+  	return err;
+  }
+  
+***************
+*** 692,698 ****
+  
+  	if (!g_dbus_send_message(connection, message)) {
+  		error("D-Bus send failed");
+- 		dbus_message_unref(message);
+  		return -1;
+  	}
+  
+--- 692,697 ----

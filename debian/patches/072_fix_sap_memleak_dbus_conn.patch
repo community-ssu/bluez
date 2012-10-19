@@ -1,0 +1,23 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	77713a7a4b310991eecdfb0e040751435f751228
+	Sun, 27 May 2012 19:41:39 +0000 (22:41 +0300)
+
+sap-dummy: Fix DBus connection leak if interface registration failed
+
+If DBus interface registration failed dbus connection should be
+unreferenced.
+
+diff -cr bluez-4.99.pan.orig/sap/sap-dummy.c bluez-4.99.pan/sap/sap-dummy.c
+*** bluez-4.99.pan.orig/sap/sap-dummy.c	Mon Oct 15 05:46:56 2012
+--- bluez-4.99.pan/sap/sap-dummy.c	Mon Oct 15 08:52:54 2012
+***************
+*** 332,337 ****
+--- 332,339 ----
+  				NULL, NULL) == FALSE) {
+  		error("sap-dummy interface %s init failed on path %s",
+  					SAP_DUMMY_IFACE, SAP_DUMMY_PATH);
++ 		dbus_connection_unref(connection);
++ 		connection = NULL;
+  		return -1;
+  	}
+  

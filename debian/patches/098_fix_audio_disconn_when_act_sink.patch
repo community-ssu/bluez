@@ -1,0 +1,158 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	e2d49cfa89ed397cd37eaf68e84a5832c9926263
+	Fri, 29 Jun 2012 11:08:35 +0000 (14:08 +0300)
+
+AVDTP: Fix disconnecting when acting as sink
+
+Usually after pairing the source will attempt to connect and create a
+stream, but it may never send AVDTP_START command as it is not
+playing anything. In the meantime the local endpoint may attempt to
+acquire the transport, but since it was the remote side that opened the
+stream instead of sending AVDTP_START the code now wait and eventually
+timeout.
+
+To fix this now instead of just waiting the remote to send AVDTP_START
+the code will attempt to send the command if nothing is received after
+a small timeout (1s).
+
+author	Frédéric Dalleau <frederic.dalleau@linux.intel.co
+commit	a6542f9dde491be937c20a835e9d1774ae099ab9
+	Mon, 2 Jul 2012 15:32:01 +0000 (18:32 +0300)
+
+audio: Fix missing reply to Acquire in AVDTP
+
+Calling org.bluez.MediaEndpoint.Acquire ends in avdtp_start().
+If bluez is acceptor of AVDTP_OPEN, then avdtp_start is delayed in a
+timer in order to wait for the initiator to send AVDTP_START.
+If the timer expires, avdtp_start() is called a second time and find
+that Bluez is acceptor. This time, since a timer already exists, Bluez
+does nothing and the answer to Acquire is never sent.
+The idea of this patch is that if we get in the timeout, we will no longer
+care whether we accepted open or not.
+
+diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
+*** bluez-4.99.pan.orig/audio/avdtp.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/avdtp.c	Tue Oct 16 15:56:56 2012
+***************
+*** 93,98 ****
+--- 93,99 ----
+  #define ABORT_TIMEOUT 2
+  #define DISCONNECT_TIMEOUT 1
+  #define STREAM_TIMEOUT 20
++ #define START_TIMEOUT 1
+  
+  #if __BYTE_ORDER == __LITTLE_ENDIAN
+  
+***************
+*** 376,382 ****
+  	gboolean open_acp;	/* If we are in ACT role for Open */
+  	gboolean close_int;	/* If we are in INT role for Close */
+  	gboolean abort_int;	/* If we are in INT role for Abort */
+! 	guint idle_timer;
+  	gboolean delay_reporting;
+  	uint16_t delay;		/* AVDTP 1.3 Delay Reporting feature */
+  	gboolean starting;	/* only valid while sep state == OPEN */
+--- 377,383 ----
+  	gboolean open_acp;	/* If we are in ACT role for Open */
+  	gboolean close_int;	/* If we are in INT role for Close */
+  	gboolean abort_int;	/* If we are in INT role for Abort */
+! 	guint start_timer;	/* Wait START command timer */
+  	gboolean delay_reporting;
+  	uint16_t delay;		/* AVDTP 1.3 Delay Reporting feature */
+  	gboolean starting;	/* only valid while sep state == OPEN */
+***************
+*** 1054,1076 ****
+  		stream->starting = FALSE;
+  		break;
+  	case AVDTP_STATE_STREAMING:
+! 		if (stream->idle_timer) {
+! 			g_source_remove(stream->idle_timer);
+! 			stream->idle_timer = 0;
+  		}
+  		stream->open_acp = FALSE;
+  		break;
+  	case AVDTP_STATE_CLOSING:
+  	case AVDTP_STATE_ABORTING:
+! 		if (stream->idle_timer) {
+! 			g_source_remove(stream->idle_timer);
+! 			stream->idle_timer = 0;
+  		}
+  		break;
+  	case AVDTP_STATE_IDLE:
+! 		if (stream->idle_timer) {
+! 			g_source_remove(stream->idle_timer);
+! 			stream->idle_timer = 0;
+  		}
+  		if (session->pending_open == stream)
+  			handle_transport_connect(session, NULL, 0, 0);
+--- 1055,1077 ----
+  		stream->starting = FALSE;
+  		break;
+  	case AVDTP_STATE_STREAMING:
+! 		if (stream->start_timer) {
+! 			g_source_remove(stream->start_timer);
+! 			stream->start_timer = 0;
+  		}
+  		stream->open_acp = FALSE;
+  		break;
+  	case AVDTP_STATE_CLOSING:
+  	case AVDTP_STATE_ABORTING:
+! 		if (stream->start_timer) {
+! 			g_source_remove(stream->start_timer);
+! 			stream->start_timer = 0;
+  		}
+  		break;
+  	case AVDTP_STATE_IDLE:
+! 		if (stream->start_timer) {
+! 			g_source_remove(stream->start_timer);
+! 			stream->start_timer = 0;
+  		}
+  		if (session->pending_open == stream)
+  			handle_transport_connect(session, NULL, 0, 0);
+***************
+*** 3621,3626 ****
+--- 3622,3642 ----
+  							&req, sizeof(req));
+  }
+  
++ static gboolean start_timeout(gpointer user_data)
++ {
++ 	struct avdtp_stream *stream = user_data;
++ 	struct avdtp *session = stream->session;
++ 
++ 	stream->open_acp = FALSE;
++ 
++ 	if (avdtp_start(session, stream) < 0)
++ 		error("wait_timeout: avdtp_start failed");
++ 
++ 	stream->start_timer = 0;
++ 
++ 	return FALSE;
++ }
++ 
+  int avdtp_start(struct avdtp *session, struct avdtp_stream *stream)
+  {
+  	struct start_req req;
+***************
+*** 3637,3643 ****
+  	 * to start the streaming via GAVDP_START.
+  	 */
+  	if (stream->open_acp) {
+! 		stream->starting = TRUE;
+  		return 0;
+  	}
+  
+--- 3653,3665 ----
+  	 * to start the streaming via GAVDP_START.
+  	 */
+  	if (stream->open_acp) {
+! 		/* If timer already active wait it */
+! 		if (stream->start_timer)
+! 			return 0;
+! 
+! 		stream->start_timer = g_timeout_add_seconds(START_TIMEOUT,
+! 								start_timeout,
+! 								stream);
+  		return 0;
+  	}
+  

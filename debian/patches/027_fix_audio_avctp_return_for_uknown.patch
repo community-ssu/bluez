@@ -1,0 +1,33 @@
+author	Lucas De Marchi <lucas.demarchi@profusion.mobi>
+commit	3479ba93704a30ccb501c697f979ada4e164914e
+	Mon, 2 Apr 2012 14:44:45 +0000 (17:44 +0300)
+
+AVCTP: return not-implemented for unknown passthrough
+
+diff -cr bluez-4.99.pan.orig/audio/avctp.c bluez-4.99.pan/audio/avctp.c
+*** bluez-4.99.pan.orig/audio/avctp.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/audio/avctp.c	Mon Oct 15 02:54:02 2012
+***************
+*** 235,243 ****
+  		break;
+  	}
+  
+! 	if (key_map[i].name == NULL)
+  		DBG("AV/C: unknown button 0x%02X %s",
+  						operands[0] & 0x7F, status);
+  
+  done:
+  	*code = AVC_CTYPE_ACCEPTED;
+--- 235,246 ----
+  		break;
+  	}
+  
+! 	if (key_map[i].name == NULL) {
+  		DBG("AV/C: unknown button 0x%02X %s",
+  						operands[0] & 0x7F, status);
++ 		*code = AVC_CTYPE_NOT_IMPLEMENTED;
++ 		return 0;
++ 	}
+  
+  done:
+  	*code = AVC_CTYPE_ACCEPTED;

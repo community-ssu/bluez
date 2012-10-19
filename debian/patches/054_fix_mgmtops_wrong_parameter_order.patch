@@ -1,0 +1,32 @@
+author	Anderson Lizardo <anderson.lizardo@openbossa.org>
+commit	8a255b3569a39837ae85491a07ac9e589865f8e0
+	Wed, 2 May 2012 11:52:15 +0000 (14:52 +0300)
+
+mgmtops: Fix wrong parameter order for btd_event_ltk_notify()
+
+The "master" parameter was in the wrong place.
+
+diff -cr bluez-4.99.pan.orig/plugins/mgmtops.c bluez-4.99.pan/plugins/mgmtops.c
+*** bluez-4.99.pan.orig/plugins/mgmtops.c	Mon Oct 15 03:54:38 2012
+--- bluez-4.99.pan/plugins/mgmtops.c	Mon Oct 15 05:40:54 2012
+***************
+*** 1720,1728 ****
+  
+  	if (ev->store_hint) {
+  		btd_event_ltk_notify(&info->bdaddr, &ev->key.addr.bdaddr,
+! 				ev->key.addr.type, ev->key.val,
+  				ev->key.authenticated, ev->key.enc_size,
+! 				ev->key.master, ev->key.ediv, ev->key.rand);
+  	}
+  
+  	if (ev->key.master)
+--- 1720,1728 ----
+  
+  	if (ev->store_hint) {
+  		btd_event_ltk_notify(&info->bdaddr, &ev->key.addr.bdaddr,
+! 				ev->key.addr.type, ev->key.val, ev->key.master,
+  				ev->key.authenticated, ev->key.enc_size,
+! 				ev->key.ediv, ev->key.rand);
+  	}
+  
+  	if (ev->key.master)

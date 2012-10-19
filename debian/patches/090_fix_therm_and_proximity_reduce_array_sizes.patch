@@ -1,0 +1,135 @@
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	7659391a25fd2f0aa17441ee4fb12c67e767f6fa
+	Wed, 27 Jun 2012 12:49:18 +0000 (15:49 +0300)
+
+thermometer: Reduce the array for Valid Range
+
+Valid Range descriptor contains two unsigned 16-bits integers
+representing the valid range of values that the Measurement Interval
+characteristic can support.
+
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	962688893d95e77b7a37e9fcfa0f3d44b771885d
+	Wed, 27 Jun 2012 12:49:18 +0000 (15:49 +0300)
+
+thermometer: Reduce the array for temperature type
+
+Temperature Type characteristic is a 8-bits value used to describe
+the type of temperature measurement in relation to the location on the
+human body.
+
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	3b6f4afa8c8b852d0ed09ed06b5067701ede0cb8
+	Wed, 27 Jun 2012 12:49:18 +0000 (15:49 +0300)
+
+thermometer: Reduce array size for Measurement Interval
+
+Measurement Interval is a 16-bits value characteristic used to enable
+and control the interval between consecutive temperature measurements.
+
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	db25f7c6fa1a6b5bb470e4c74fbe404c571a4f84
+	Wed, 27 Jun 2012 12:49:18 +0000 (15:49 +0300)
+
+proximity: Reduce array size for Tx Power Level
+
+Tx Power Level characteristic is a signed 8-bits integer which reports
+the current transmit power level.
+
+diff -cr bluez-4.99.pan.orig/proximity/monitor.c bluez-4.99.pan/proximity/monitor.c
+*** bluez-4.99.pan.orig/proximity/monitor.c	Tue Oct 16 14:44:30 2012
+--- bluez-4.99.pan/proximity/monitor.c	Tue Oct 16 14:49:10 2012
+***************
+*** 55,60 ****
+--- 55,61 ----
+  #define POWER_LEVEL_CHR_UUID 0x2A07
+  
+  #define IMMEDIATE_TIMEOUT	5
++ #define TX_POWER_SIZE		1
+  
+  enum {
+  	ALERT_NONE = 0,
+***************
+*** 211,217 ****
+  static void tx_power_read_cb(guint8 status, const guint8 *pdu, guint16 plen,
+  							gpointer user_data)
+  {
+! 	uint8_t value[ATT_MAX_MTU];
+  	ssize_t vlen;
+  
+  	if (status != 0) {
+--- 212,218 ----
+  static void tx_power_read_cb(guint8 status, const guint8 *pdu, guint16 plen,
+  							gpointer user_data)
+  {
+! 	uint8_t value[TX_POWER_SIZE];
+  	ssize_t vlen;
+  
+  	if (status != 0) {
+diff -cr bluez-4.99.pan.orig/thermometer/thermometer.c bluez-4.99.pan/thermometer/thermometer.c
+*** bluez-4.99.pan.orig/thermometer/thermometer.c	Tue Oct 16 14:44:36 2012
+--- bluez-4.99.pan/thermometer/thermometer.c	Tue Oct 16 14:48:28 2012
+***************
+*** 54,59 ****
+--- 54,63 ----
+  
+  #define FLOAT_MAX_MANTISSA	16777216 /* 2^24 */
+  
++ #define VALID_RANGE_DESC_SIZE	4
++ #define TEMPERATURE_TYPE_SIZE	1
++ #define MEASUREMENT_INTERVAL_SIZE	2
++ 
+  struct thermometer {
+  	DBusConnection		*conn;		/* The connection to the bus */
+  	struct btd_device	*dev;		/* Device reference */
+***************
+*** 303,309 ****
+  							gpointer user_data)
+  {
+  	struct descriptor *desc = user_data;
+! 	uint8_t value[ATT_MAX_MTU];
+  	uint16_t max, min;
+  	ssize_t vlen;
+  
+--- 307,313 ----
+  							gpointer user_data)
+  {
+  	struct descriptor *desc = user_data;
+! 	uint8_t value[VALID_RANGE_DESC_SIZE];
+  	uint16_t max, min;
+  	ssize_t vlen;
+  
+***************
+*** 449,455 ****
+  {
+  	struct characteristic *ch = user_data;
+  	struct thermometer *t = ch->t;
+! 	uint8_t value[ATT_MAX_MTU];
+  	ssize_t vlen;
+  
+  	if (status != 0) {
+--- 453,459 ----
+  {
+  	struct characteristic *ch = user_data;
+  	struct thermometer *t = ch->t;
+! 	uint8_t value[TEMPERATURE_TYPE_SIZE];
+  	ssize_t vlen;
+  
+  	if (status != 0) {
+***************
+*** 477,483 ****
+  							gpointer user_data)
+  {
+  	struct characteristic *ch = user_data;
+! 	uint8_t value[ATT_MAX_MTU];
+  	uint16_t interval;
+  	ssize_t vlen;
+  
+--- 481,487 ----
+  							gpointer user_data)
+  {
+  	struct characteristic *ch = user_data;
+! 	uint8_t value[MEASUREMENT_INTERVAL_SIZE];
+  	uint16_t interval;
+  	ssize_t vlen;
+  

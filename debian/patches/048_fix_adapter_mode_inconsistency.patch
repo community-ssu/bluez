@@ -1,0 +1,41 @@
+author	Mikel Astiz <mikel.astiz.oss@gmail.com>
+commit	f4807c64e0fdfca2c546c13753257437a879c203
+	Mon, 23 Apr 2012 09:54:10 +0000 (12:54 +0300)
+
+core: Fix adapter mode inconsistency
+
+The mode change in btd_adapter_start() doesn't check if the adapter is
+discoverable, creating an inconsistency between the plugin and the core.
+
+Using the management interface it is easy to reproduce the problem, by
+starting BlueZ while the adapter is discoverable. After this, the state
+cannot be changed.
+
+diff -cr bluez-4.99.pan.orig/src/adapter.c bluez-4.99.pan/src/adapter.c
+*** bluez-4.99.pan.orig/src/adapter.c	Mon Oct 15 03:21:38 2012
+--- bluez-4.99.pan/src/adapter.c	Mon Oct 15 05:17:55 2012
+***************
+*** 2183,2191 ****
+  	adapter->up = TRUE;
+  	adapter->discov_timeout = get_discoverable_timeout(address);
+  	adapter->pairable_timeout = get_pairable_timeout(address);
+- 	adapter->mode = MODE_CONNECTABLE;
+  	adapter->off_timer = 0;
+  
+  	powered = TRUE;
+  	emit_property_changed(connection, adapter->path,
+  					ADAPTER_INTERFACE, "Powered",
+--- 2183,2195 ----
+  	adapter->up = TRUE;
+  	adapter->discov_timeout = get_discoverable_timeout(address);
+  	adapter->pairable_timeout = get_pairable_timeout(address);
+  	adapter->off_timer = 0;
+  
++ 	if (adapter->scan_mode & SCAN_INQUIRY)
++ 		adapter->mode = MODE_DISCOVERABLE;
++ 	else
++ 		adapter->mode = MODE_CONNECTABLE;
++ 
+  	powered = TRUE;
+  	emit_property_changed(connection, adapter->path,
+  					ADAPTER_INTERFACE, "Powered",

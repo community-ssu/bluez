@@ -1,0 +1,107 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	ea793cb9f744cd2942b66385118161b880de958a
+	Tue, 26 Jun 2012 09:51:47 +0000 (12:51 +0300)
+
+input: Fix not adding watches when io channel is connected
+
+This can leave dangling pointers in case one of the channel is never
+connected which cause -EALREADY to be returned by
+input_device_set_channel next time the device attempts to connect.
+
+For the same reason the code path when acting as client now add the
+watch as soon as the connection completes instead when both channels
+are connected.
+
+diff -cr bluez-4.99.pan.orig/input/device.c bluez-4.99.pan/input/device.c
+*** bluez-4.99.pan.orig/input/device.c	Mon Oct 15 05:57:31 2012
+--- bluez-4.99.pan/input/device.c	Tue Oct 16 10:58:24 2012
+***************
+*** 391,396 ****
+--- 391,401 ----
+  	struct input_conn *iconn = data;
+  	struct input_device *idev = iconn->idev;
+  	gboolean connected = FALSE;
++ 	char address[18];
++ 
++ 	ba2str(&iconn->idev->dst, address);
++ 
++ 	DBG("Device %s disconnected", address);
+  
+  	/* Checking for ctrl_watch avoids a double g_io_channel_shutdown since
+  	 * it's likely that ctrl_watch_cb has been queued for dispatching in
+***************
+*** 419,424 ****
+--- 424,434 ----
+  static gboolean ctrl_watch_cb(GIOChannel *chan, GIOCondition cond, gpointer data)
+  {
+  	struct input_conn *iconn = data;
++ 	char address[18];
++ 
++ 	ba2str(&iconn->idev->dst, address);
++ 
++ 	DBG("Device %s disconnected", address);
+  
+  	/* Checking for intr_watch avoids a double g_io_channel_shutdown since
+  	 * it's likely that intr_watch_cb has been queued for dispatching in
+***************
+*** 815,827 ****
+  	if (err < 0)
+  		return err;
+  
+- 	iconn->intr_watch = g_io_add_watch(iconn->intr_io,
+- 					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+- 					intr_watch_cb, iconn);
+- 	iconn->ctrl_watch = g_io_add_watch(iconn->ctrl_io,
+- 					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+- 					ctrl_watch_cb, iconn);
+- 
+  	connected = TRUE;
+  	emit_property_changed(idev->conn, idev->path, INPUT_DEVICE_INTERFACE,
+  				"Connected", DBUS_TYPE_BOOLEAN, &connected);
+--- 825,830 ----
+***************
+*** 858,863 ****
+--- 861,870 ----
+  	dbus_message_unref(iconn->pending_connect);
+  	iconn->pending_connect = NULL;
+  
++ 	iconn->intr_watch = g_io_add_watch(iconn->intr_io,
++ 					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
++ 					intr_watch_cb, iconn);
++ 
+  	return;
+  
+  failed:
+***************
+*** 917,922 ****
+--- 924,933 ----
+  
+  	iconn->intr_io = io;
+  
++ 	iconn->ctrl_watch = g_io_add_watch(iconn->ctrl_io,
++ 					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
++ 					ctrl_watch_cb, iconn);
++ 
+  	return;
+  
+  failed:
+***************
+*** 1282,1292 ****
+--- 1293,1309 ----
+  		if (iconn->ctrl_io)
+  			return -EALREADY;
+  		iconn->ctrl_io = g_io_channel_ref(io);
++ 		iconn->ctrl_watch = g_io_add_watch(iconn->ctrl_io,
++ 					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
++ 					ctrl_watch_cb, iconn);
+  		break;
+  	case L2CAP_PSM_HIDP_INTR:
+  		if (iconn->intr_io)
+  			return -EALREADY;
+  		iconn->intr_io = g_io_channel_ref(io);
++ 		iconn->intr_watch = g_io_add_watch(iconn->intr_io,
++ 					G_IO_HUP | G_IO_ERR | G_IO_NVAL,
++ 					intr_watch_cb, iconn);
+  		break;
+  	}
+  

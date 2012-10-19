@@ -1,0 +1,43 @@
+author	Anderson Lizardo <anderson.lizardo@openbossa.org>
+commit	098de49acf20f12a925cea8bf4b0d2bc90c9b44d
+	Wed, 4 Apr 2012 10:00:14 +0000 (13:00 +0300)
+
+attrib: Fix D-Bus service disconnect watch removal
+
+watcher_free() will be automatically called when removing the D-Bus
+watch (it was set as the destroy callback when adding the watch),
+therefore it is only necessary to remove the watch.
+
+diff -cr bluez-4.99.pan.orig/attrib/client.c bluez-4.99.pan/attrib/client.c
+*** bluez-4.99.pan.orig/attrib/client.c	Mon Oct 15 03:03:37 2012
+--- bluez-4.99.pan/attrib/client.c	Mon Oct 15 03:14:30 2012
+***************
+*** 212,217 ****
+--- 212,218 ----
+  	DBG("%s watcher %s exited", gatt->path, watcher->name);
+  
+  	gatt->watchers = g_slist_remove(gatt->watchers, watcher);
++ 	g_dbus_remove_watch(gatt->conn, watcher->id);
+  }
+  
+  static int characteristic_set_value(struct characteristic *chr,
+***************
+*** 404,412 ****
+  		return btd_error_not_authorized(msg);
+  
+  	watcher = l->data;
+- 	g_dbus_remove_watch(conn, watcher->id);
+  	gatt->watchers = g_slist_remove(gatt->watchers, watcher);
+! 	watcher_free(watcher);
+  
+  	if (gatt->watchers == NULL && gatt->attioid) {
+  		btd_device_remove_attio_callback(gatt->dev, gatt->attioid);
+--- 405,412 ----
+  		return btd_error_not_authorized(msg);
+  
+  	watcher = l->data;
+  	gatt->watchers = g_slist_remove(gatt->watchers, watcher);
+! 	g_dbus_remove_watch(conn, watcher->id);
+  
+  	if (gatt->watchers == NULL && gatt->attioid) {
+  		btd_device_remove_attio_callback(gatt->dev, gatt->attioid);

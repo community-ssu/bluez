@@ -1,0 +1,39 @@
+author	Frédéric Dalleau <frederic.dalleau@linux.intel.co
+commit	ba9888c3cf663be883e5c7b78f1cf74e418a719c
+	Tue, 13 Mar 2012 13:59:53 +0000 (15:59 +0200)
+
+sdp: Check type of sdp data before dereferencing
+
+diff -cr bluez-4.99.pan.orig/lib/sdp.c bluez-4.99.pan/lib/sdp.c
+*** bluez-4.99.pan.orig/lib/sdp.c	Mon May 30 22:39:53 2011
+--- bluez-4.99.pan/lib/sdp.c	Fri Oct 12 07:49:31 2012
+***************
+*** 2065,2071 ****
+  
+  		if (SDP_IS_UUID(seq->dtd)) {
+  			uuid = &seq->val.uuid;
+! 		} else {
+  			sdp_data_t *puuid = seq->val.dataseq;
+  			sdp_data_t *pVnum = seq->val.dataseq->next;
+  			if (puuid && pVnum) {
+--- 2065,2071 ----
+  
+  		if (SDP_IS_UUID(seq->dtd)) {
+  			uuid = &seq->val.uuid;
+! 		} else if (SDP_IS_SEQ(seq->dtd)) {
+  			sdp_data_t *puuid = seq->val.dataseq;
+  			sdp_data_t *pVnum = seq->val.dataseq->next;
+  			if (puuid && pVnum) {
+diff -cr bluez-4.99.pan.orig/lib/sdp.h bluez-4.99.pan/lib/sdp.h
+*** bluez-4.99.pan.orig/lib/sdp.h	Tue Mar 15 20:34:27 2011
+--- bluez-4.99.pan/lib/sdp.h	Fri Oct 12 07:50:26 2012
+***************
+*** 432,437 ****
+--- 432,438 ----
+  } uuid_t;
+  
+  #define SDP_IS_UUID(x) ((x) == SDP_UUID16 || (x) == SDP_UUID32 || (x) ==SDP_UUID128)
++ #define SDP_IS_SEQ(x) ((x) == SDP_SEQ8 || (x) == SDP_SEQ16 || (x) ==SDP_SEQ32)
+  
+  typedef struct _sdp_list sdp_list_t;
+  struct _sdp_list {

@@ -1,0 +1,181 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	c8f454489969c64827f3ca60ac5a93e54a97f936
+	Tue, 2 Oct 2012 07:44:20 +0000 (10:44 +0300)
+
+audio: Fix crash if gateway closed before reply
+
+Any pending call to the agent needs to be cancelled in gateway_close(),
+to make sure newconnection_reply() never gets called.
+
+Otherwise, the audio gateway can be closed (dev->gateway == NULL) before
+the reply from the agent has been received, resulting in the following
+crash as reproduced while removing (unpairing) a device:
+
+bluetoothd[2219]: src/mgmt.c:mgmt_unpair_device() index 0 addr 38:16:D1:C5:D1:A2
+bluetoothd[2219]: audio/gateway.c:path_unregister() Unregistered interface org.bluez.HandsfreeGateway on path /org/bluez/2219/hci0/dev_38_16_D1_C5_D1_A2
+bluetoothd[2219]: audio/media.c:gateway_state_changed()
+bluetoothd[2219]: audio/media.c:gateway_state_changed() Clear endpoint 0x555555820640
+bluetoothd[2219]: audio/source.c:path_unregister() Unregistered interface org.bluez.AudioSource on path /org/bluez/2219/hci0/dev_38_16_D1_C5_D1_A2
+bluetoothd[2219]: src/device.c:btd_device_unref() 0x555555833e70: ref=1
+bluetoothd[2219]: src/adapter.c:adapter_get_device() 38:16:D1:C5:D1:A2
+bluetoothd[2219]: src/adapter.c:adapter_create_device() 38:16:D1:C5:D1:A2
+bluetoothd[2219]: src/device.c:device_create() Creating device /org/bluez/2219/hci0/dev_38_16_D1_C5_D1_A2
+bluetoothd[2219]: src/device.c:device_free() 0x55555581f9c0
+bluetoothd[2219]: Unable to get btd_device object for 38:16:D1:C5:D1:A2
+bluetoothd[2219]: src/device.c:btd_device_unref() 0x555555833e70: ref=0
+bluetoothd[2219]: src/device.c:device_free() 0x555555833e70
+bluetoothd[2219]: src/mgmt.c:mgmt_event() cond 1
+bluetoothd[2219]: src/mgmt.c:mgmt_event() Received 16 bytes from management socket
+bluetoothd[2219]: src/mgmt.c:mgmt_cmd_complete()
+bluetoothd[2219]: src/mgmt.c:mgmt_cmd_complete() unpair_device complete
+
+Program received signal SIGSEGV, Segmentation fault.
+0x000055555556fa26 in newconnection_reply (call=<optimized out>, data=0x555555824dd0) at audio/gateway.c:285
+285 if (!dev->gateway->rfcomm) {
+
+Additionally, this patch makes it unnecessary to check if RFCOMM got
+disconnected before newconnection_reply, since RFCOMM disconnection also
+triggers gateway_close() and thus the agent's call will be cancelled.
+
+diff -cr bluez-4.99.pan.orig/audio/gateway.c bluez-4.99.pan/audio/gateway.c
+*** bluez-4.99.pan.orig/audio/gateway.c	Wed Oct 17 07:12:54 2012
+--- bluez-4.99.pan/audio/gateway.c	Wed Oct 17 07:47:45 2012
+***************
+*** 59,64 ****
+--- 59,65 ----
+  	char *name;	/* Bus id */
+  	char *path;	/* D-Bus path */
+  	guint watch;	/* Disconnect watch */
++ 	DBusPendingCall *call;
+  };
+  
+  struct connect_cb {
+***************
+*** 115,120 ****
+--- 116,124 ----
+  	if (!agent)
+  		return;
+  
++ 	if (agent->call)
++ 		dbus_pending_call_unref(agent->call);
++ 
+  	g_free(agent->name);
+  	g_free(agent->path);
+  	g_free(agent);
+***************
+*** 157,162 ****
+--- 161,176 ----
+  	}
+  }
+  
++ static void agent_cancel(struct hf_agent *agent)
++ {
++ 	if (!agent->call)
++ 		return;
++ 
++ 	dbus_pending_call_cancel(agent->call);
++ 	dbus_pending_call_unref(agent->call);
++ 	agent->call = NULL;
++ }
++ 
+  static void agent_disconnect(struct audio_device *dev, struct hf_agent *agent)
+  {
+  	DBusMessage *msg;
+***************
+*** 165,170 ****
+--- 179,186 ----
+  			"org.bluez.HandsfreeAgent", "Release");
+  
+  	g_dbus_send_message(dev->conn, msg);
++ 
++ 	agent_cancel(agent);
+  }
+  
+  static gboolean agent_sendfd(struct hf_agent *agent, int fd,
+***************
+*** 173,179 ****
+  	struct audio_device *dev = data;
+  	struct gateway *gw = dev->gateway;
+  	DBusMessage *msg;
+! 	DBusPendingCall *call;
+  
+  	msg = dbus_message_new_method_call(agent->name, agent->path,
+  			"org.bluez.HandsfreeAgent", "NewConnection");
+--- 189,197 ----
+  	struct audio_device *dev = data;
+  	struct gateway *gw = dev->gateway;
+  	DBusMessage *msg;
+! 
+! 	if (agent->call)
+! 		return FALSE;
+  
+  	msg = dbus_message_new_method_call(agent->name, agent->path,
+  			"org.bluez.HandsfreeAgent", "NewConnection");
+***************
+*** 183,195 ****
+  					DBUS_TYPE_INVALID);
+  
+  	if (dbus_connection_send_with_reply(dev->conn, msg,
+! 							&call, -1) == FALSE) {
+  		dbus_message_unref(msg);
+  		return FALSE;
+  	}
+  
+! 	dbus_pending_call_set_notify(call, notify, dev, NULL);
+! 	dbus_pending_call_unref(call);
+  	dbus_message_unref(msg);
+  
+  	return TRUE;
+--- 201,212 ----
+  					DBUS_TYPE_INVALID);
+  
+  	if (dbus_connection_send_with_reply(dev->conn, msg,
+! 						&agent->call, -1) == FALSE) {
+  		dbus_message_unref(msg);
+  		return FALSE;
+  	}
+  
+! 	dbus_pending_call_set_notify(agent->call, notify, dev, NULL);
+  	dbus_message_unref(msg);
+  
+  	return TRUE;
+***************
+*** 284,296 ****
+  {
+  	struct audio_device *dev = data;
+  	struct gateway *gw = dev->gateway;
+  	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+  	DBusError derr;
+  
+! 	if (!dev->gateway->rfcomm) {
+! 		DBG("RFCOMM disconnected from server before agent reply");
+! 		goto done;
+! 	}
+  
+  	dbus_error_init(&derr);
+  	if (!dbus_set_error_from_message(&derr, reply)) {
+--- 301,312 ----
+  {
+  	struct audio_device *dev = data;
+  	struct gateway *gw = dev->gateway;
++ 	struct hf_agent *agent = gw->agent;
+  	DBusMessage *reply = dbus_pending_call_steal_reply(call);
+  	DBusError derr;
+  
+! 	dbus_pending_call_unref(agent->call);
+! 	agent->call = NULL;
+  
+  	dbus_error_init(&derr);
+  	if (!dbus_set_error_from_message(&derr, reply)) {
+***************
+*** 590,595 ****
+--- 606,614 ----
+  		gw->sco = NULL;
+  	}
+  
++ 	if (gw->agent)
++ 		agent_cancel(gw->agent);
++ 
+  	change_state(device, GATEWAY_STATE_DISCONNECTED);
+  	g_set_error(&gerr, GATEWAY_ERROR,
+  			GATEWAY_ERROR_DISCONNECTED, "Disconnected");

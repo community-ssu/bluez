@@ -1,0 +1,40 @@
+author	Arik Nemtsov <arik@wizery.com>
+commit	fb018899b65f98dc847c06a104e4350ef3ac4a23
+	Thu, 15 Mar 2012 08:17:09 +0000 (08:17 +0000)
+
+device: don't auto-connect on disc-cb attio callback registration
+
+If a device is already connected, don't auto-connect if we register
+a disconnect-only attio callback. This will obviously fail.
+
+diff -cr bluez-4.99.pan.orig/src/device.c bluez-4.99.pan/src/device.c
+*** bluez-4.99.pan.orig/src/device.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/src/device.c	Fri Oct 12 07:54:45 2012
+***************
+*** 2942,2951 ****
+  	attio->dcfunc = dcfunc;
+  	attio->user_data = user_data;
+  
+! 	if (device->attrib && cfunc) {
+! 		device->attios_offline = g_slist_append(device->attios_offline,
+! 									attio);
+! 		g_idle_add(notify_attios, device);
+  	} else {
+  		device->auto_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+  						att_connect, device,
+--- 2942,2956 ----
+  	attio->dcfunc = dcfunc;
+  	attio->user_data = user_data;
+  
+! 	if (device->attrib) {
+! 		if (cfunc) {
+! 			device->attios_offline =
+! 				g_slist_append(device->attios_offline, attio);
+! 
+! 			g_idle_add(notify_attios, device);
+! 		} else {
+! 			device->attios = g_slist_append(device->attios, attio);
+! 		}
+  	} else {
+  		device->auto_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+  						att_connect, device,

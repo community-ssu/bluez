@@ -1,0 +1,130 @@
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	ea4ff5109b2eab060493dc7d6fdf705a26b8d9fe
+	Thu, 20 Sep 2012 11:10:54 +0000 (14:10 +0300)
+
+gatttool: Fix Characteristic descriptor discovery
+
+This patch fixes end condition for Characteristic Descriptor Discovery.
+This sub-procedure is complete when the Error Response is received and
+the Error Code is set to Attribute Not Found or the Find Information
+Response has an Attribute Handle that is equal to the Ending Handle of
+the request.
+
+diff -cr bluez-4.99.pan.orig/attrib/interactive.c bluez-4.99.pan/attrib/interactive.c
+*** bluez-4.99.pan.orig/attrib/interactive.c	Tue Oct 16 14:44:12 2012
+--- bluez-4.99.pan/attrib/interactive.c	Wed Oct 17 05:58:38 2012
+***************
+*** 47,52 ****
+--- 47,54 ----
+  static gchar *opt_sec_level = NULL;
+  static int opt_psm = 0;
+  static int opt_mtu = 0;
++ static int start;
++ static int end;
+  
+  struct characteristic_data {
+  	uint16_t orig_start;
+***************
+*** 218,228 ****
+  {
+  	struct att_data_list *list;
+  	guint8 format;
+  	int i;
+  
+  	if (status != 0) {
+! 		printf("Discover all characteristic descriptors failed: "
+! 						"%s\n", att_ecode2str(status));
+  		return;
+  	}
+  
+--- 220,231 ----
+  {
+  	struct att_data_list *list;
+  	guint8 format;
++ 	uint16_t handle = 0xffff;
+  	int i;
+  
+  	if (status != 0) {
+! 		printf("Discover descriptors finished: %s\n",
+! 						att_ecode2str(status));
+  		return;
+  	}
+  
+***************
+*** 233,239 ****
+  	printf("\n");
+  	for (i = 0; i < list->num; i++) {
+  		char uuidstr[MAX_LEN_UUID_STR];
+- 		uint16_t handle;
+  		uint8_t *value;
+  		bt_uuid_t uuid;
+  
+--- 236,241 ----
+***************
+*** 251,257 ****
+  
+  	att_data_list_free(list);
+  
+! 	rl_forced_update_display();
+  }
+  
+  static void char_read_cb(guint8 status, const guint8 *pdu, guint16 plen,
+--- 253,262 ----
+  
+  	att_data_list_free(list);
+  
+! 	if (handle != 0xffff && handle < end)
+! 		gatt_find_info(attrib, handle + 1, end, char_desc_cb, NULL);
+! 	else
+! 		rl_forced_update_display();
+  }
+  
+  static void char_read_cb(guint8 status, const guint8 *pdu, guint16 plen,
+***************
+*** 445,453 ****
+  
+  static void cmd_char_desc(int argcp, char **argvp)
+  {
+- 	int start = 0x0001;
+- 	int end = 0xffff;
+- 
+  	if (conn_state != STATE_CONNECTED) {
+  		printf("Command failed: disconnected\n");
+  		return;
+--- 450,455 ----
+***************
+*** 459,465 ****
+  			printf("Invalid start handle: %s\n", argvp[1]);
+  			return;
+  		}
+! 	}
+  
+  	if (argcp > 2) {
+  		end = strtohandle(argvp[2]);
+--- 461,468 ----
+  			printf("Invalid start handle: %s\n", argvp[1]);
+  			return;
+  		}
+! 	} else
+! 		start = 0x0001;
+  
+  	if (argcp > 2) {
+  		end = strtohandle(argvp[2]);
+***************
+*** 467,473 ****
+  			printf("Invalid end handle: %s\n", argvp[2]);
+  			return;
+  		}
+! 	}
+  
+  	gatt_find_info(attrib, start, end, char_desc_cb, NULL);
+  }
+--- 470,477 ----
+  			printf("Invalid end handle: %s\n", argvp[2]);
+  			return;
+  		}
+! 	} else
+! 		end = 0xffff;
+  
+  	gatt_find_info(attrib, start, end, char_desc_cb, NULL);
+  }

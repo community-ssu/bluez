@@ -1,0 +1,32 @@
+author	Lucas De Marchi <lucas.de.marchi@gmail.com>
+commit	d239258e8d759514af2d390a332661c2d1888ac3
+	Tue, 9 Oct 2012 09:55:45 +0000 (11:55 +0200)
+
+adapter: Fix calling mgmt_set_pairable() with error set
+
+diff -cr bluez-4.99.pan.orig/src/adapter.c bluez-4.99.pan/src/adapter.c
+*** bluez-4.99.pan.orig/src/adapter.c	Wed Oct 17 08:02:24 2012
+--- bluez-4.99.pan/src/adapter.c	Wed Oct 17 08:14:59 2012
+***************
+*** 388,395 ****
+  		goto store;
+  
+  	err = set_mode(adapter, MODE_DISCOVERABLE, NULL);
+! 	if (err < 0 && msg)
+! 		return btd_error_failed(msg, strerror(-err));
+  
+  store:
+  	adapter_ops->set_pairable(adapter->dev_id, pairable);
+--- 388,399 ----
+  		goto store;
+  
+  	err = set_mode(adapter, MODE_DISCOVERABLE, NULL);
+! 	if (err < 0) {
+! 		if (msg != NULL)
+! 			return btd_error_failed(msg, strerror(-err));
+! 
+! 		return NULL;
+! 	}
+  
+  store:
+  	adapter_ops->set_pairable(adapter->dev_id, pairable);

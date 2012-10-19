@@ -1,0 +1,36 @@
+author	Scott James Remnant <scott@netsplit.com>
+commit	ed31ac59ecb6e4e15c350e44637c05d7ef58c019
+	Thu, 19 Apr 2012 07:50:20 +0000 (10:50 +0300)
+
+hciops: map KeyboardDisplay IO Capability to DisplayYesNo
+
+Since hciops is not used for LE devices, if an agent announces the
+KeyboardDisplay IO Capability when creating a bonding, map it to
+DisplayYesNo.
+
+This matches the existing change in hciops_set_io_capability which
+is only used in the RegisterAgent path.
+
+diff -cr bluez-4.99.pan.orig/plugins/hciops.c bluez-4.99.pan/plugins/hciops.c
+*** bluez-4.99.pan.orig/plugins/hciops.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/plugins/hciops.c	Mon Oct 15 05:15:09 2012
+***************
+*** 3736,3742 ****
+  	if (conn->io != NULL)
+  		return -EBUSY;
+  
+! 	conn->loc_cap = io_cap;
+  
+  	/* If our IO capability is NoInputNoOutput use medium security
+  	 * level (i.e. don't require MITM protection) else use high
+--- 3736,3745 ----
+  	if (conn->io != NULL)
+  		return -EBUSY;
+  
+! 	/* hciops is not to be used for SMP pairing for LE devices. So
+! 	 * change the IO capability from KeyboardDisplay to DisplayYesNo
+! 	 * in case it is set. */
+! 	conn->loc_cap = (io_cap == 0x04 ? 0x01 : io_cap);
+  
+  	/* If our IO capability is NoInputNoOutput use medium security
+  	 * level (i.e. don't require MITM protection) else use high

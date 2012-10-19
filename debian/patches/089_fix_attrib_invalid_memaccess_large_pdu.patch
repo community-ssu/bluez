@@ -1,0 +1,312 @@
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	2f8cd0cb7eb9a4bceb1cec221ccd21f76d66f318
+	Wed, 27 Jun 2012 12:49:18 +0000 (15:49 +0300)
+
+ATT: Avoid invalid memory access for large PDU
+
+This patch avoids invalid memory access when decoding ATT read response
+PDUs. The ATT_MTU value is a per ATT Bearer value defined by the higher
+layer specification.
+
+diff -cr bluez-4.99.pan.orig/attrib/att.c bluez-4.99.pan/attrib/att.c
+*** bluez-4.99.pan.orig/attrib/att.c	Mon Oct 15 10:32:19 2012
+--- bluez-4.99.pan/attrib/att.c	Tue Oct 16 14:31:51 2012
+***************
+*** 681,702 ****
+  	return vlen + 1;
+  }
+  
+! uint16_t dec_read_resp(const uint8_t *pdu, int len, uint8_t *value, int *vlen)
+  {
+  	if (pdu == NULL)
+! 		return 0;
+  
+! 	if (value == NULL || vlen == NULL)
+! 		return 0;
+  
+  	if (pdu[0] != ATT_OP_READ_RESP)
+! 		return 0;
+  
+! 	memcpy(value, pdu + 1, len - 1);
+  
+! 	*vlen = len - 1;
+  
+! 	return len;
+  }
+  
+  uint16_t enc_error_resp(uint8_t opcode, uint16_t handle, uint8_t status,
+--- 681,703 ----
+  	return vlen + 1;
+  }
+  
+! ssize_t dec_read_resp(const uint8_t *pdu, int len, uint8_t *value, int vlen)
+  {
+  	if (pdu == NULL)
+! 		return -EINVAL;
+  
+! 	if (value == NULL)
+! 		return -EINVAL;
+  
+  	if (pdu[0] != ATT_OP_READ_RESP)
+! 		return -EINVAL;
+  
+! 	if (vlen < (len - 1))
+! 		return -ENOBUFS;
+  
+! 	memcpy(value, pdu + 1, len - 1);
+  
+! 	return len - 1;
+  }
+  
+  uint16_t enc_error_resp(uint8_t opcode, uint16_t handle, uint8_t status,
+diff -cr bluez-4.99.pan.orig/attrib/att.h bluez-4.99.pan/attrib/att.h
+*** bluez-4.99.pan.orig/attrib/att.h	Mon Oct 15 10:32:19 2012
+--- bluez-4.99.pan/attrib/att.h	Tue Oct 16 14:32:20 2012
+***************
+*** 294,300 ****
+  uint16_t enc_read_resp(uint8_t *value, int vlen, uint8_t *pdu, int len);
+  uint16_t enc_read_blob_resp(uint8_t *value, int vlen, uint16_t offset,
+  							uint8_t *pdu, int len);
+! uint16_t dec_read_resp(const uint8_t *pdu, int len, uint8_t *value, int *vlen);
+  uint16_t enc_error_resp(uint8_t opcode, uint16_t handle, uint8_t status,
+  							uint8_t *pdu, int len);
+  uint16_t enc_find_info_req(uint16_t start, uint16_t end, uint8_t *pdu, int len);
+--- 294,300 ----
+  uint16_t enc_read_resp(uint8_t *value, int vlen, uint8_t *pdu, int len);
+  uint16_t enc_read_blob_resp(uint8_t *value, int vlen, uint16_t offset,
+  							uint8_t *pdu, int len);
+! ssize_t dec_read_resp(const uint8_t *pdu, int len, uint8_t *value, int vlen);
+  uint16_t enc_error_resp(uint8_t opcode, uint16_t handle, uint8_t status,
+  							uint8_t *pdu, int len);
+  uint16_t enc_find_info_req(uint16_t start, uint16_t end, uint8_t *pdu, int len);
+diff -cr bluez-4.99.pan.orig/attrib/gatttool.c bluez-4.99.pan/attrib/gatttool.c
+*** bluez-4.99.pan.orig/attrib/gatttool.c	Mon Oct 15 10:32:19 2012
+--- bluez-4.99.pan/attrib/gatttool.c	Tue Oct 16 14:34:32 2012
+***************
+*** 226,239 ****
+  							gpointer user_data)
+  {
+  	uint8_t value[ATT_MAX_MTU];
+! 	int i, vlen;
+  
+  	if (status != 0) {
+  		g_printerr("Characteristic value/descriptor read failed: %s\n",
+  							att_ecode2str(status));
+  		goto done;
+  	}
+! 	if (!dec_read_resp(pdu, plen, value, &vlen)) {
+  		g_printerr("Protocol error\n");
+  		goto done;
+  	}
+--- 226,242 ----
+  							gpointer user_data)
+  {
+  	uint8_t value[ATT_MAX_MTU];
+! 	ssize_t vlen;
+! 	int i;
+  
+  	if (status != 0) {
+  		g_printerr("Characteristic value/descriptor read failed: %s\n",
+  							att_ecode2str(status));
+  		goto done;
+  	}
+! 
+! 	vlen = dec_read_resp(pdu, plen, value, sizeof(value));
+! 	if(vlen < 0) {
+  		g_printerr("Protocol error\n");
+  		goto done;
+  	}
+diff -cr bluez-4.99.pan.orig/attrib/interactive.c bluez-4.99.pan/attrib/interactive.c
+*** bluez-4.99.pan.orig/attrib/interactive.c	Mon Oct 15 10:32:19 2012
+--- bluez-4.99.pan/attrib/interactive.c	Tue Oct 16 14:38:20 2012
+***************
+*** 258,264 ****
+  							gpointer user_data)
+  {
+  	uint8_t value[ATT_MAX_MTU];
+! 	int i, vlen;
+  
+  	if (status != 0) {
+  		printf("Characteristic value/descriptor read failed: %s\n",
+--- 258,265 ----
+  							gpointer user_data)
+  {
+  	uint8_t value[ATT_MAX_MTU];
+! 	ssize_t vlen;
+! 	int i;
+  
+  	if (status != 0) {
+  		printf("Characteristic value/descriptor read failed: %s\n",
+***************
+*** 266,272 ****
+  		return;
+  	}
+  
+! 	if (!dec_read_resp(pdu, plen, value, &vlen)) {
+  		printf("Protocol error\n");
+  		return;
+  	}
+--- 267,274 ----
+  		return;
+  	}
+  
+! 	vlen = dec_read_resp(pdu, plen, value, sizeof(value));
+! 	if (vlen < 0) {
+  		printf("Protocol error\n");
+  		return;
+  	}
+diff -cr bluez-4.99.pan.orig/proximity/monitor.c bluez-4.99.pan/proximity/monitor.c
+*** bluez-4.99.pan.orig/proximity/monitor.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/proximity/monitor.c	Tue Oct 16 14:38:00 2012
+***************
+*** 212,231 ****
+  							gpointer user_data)
+  {
+  	uint8_t value[ATT_MAX_MTU];
+! 	int vlen;
+  
+  	if (status != 0) {
+  		DBG("Tx Power Level read failed: %s", att_ecode2str(status));
+  		return;
+  	}
+  
+! 	if (!dec_read_resp(pdu, plen, value, &vlen)) {
+  		DBG("Protocol error");
+  		return;
+  	}
+  
+  	if (vlen != 1) {
+! 		DBG("Invalid length for TX Power value: %d", vlen);
+  		return;
+  	}
+  
+--- 212,232 ----
+  							gpointer user_data)
+  {
+  	uint8_t value[ATT_MAX_MTU];
+! 	ssize_t vlen;
+  
+  	if (status != 0) {
+  		DBG("Tx Power Level read failed: %s", att_ecode2str(status));
+  		return;
+  	}
+  
+! 	vlen = dec_read_resp(pdu, plen, value, sizeof(value));
+! 	if (vlen < 0) {
+  		DBG("Protocol error");
+  		return;
+  	}
+  
+  	if (vlen != 1) {
+! 		DBG("Invalid length for TX Power value: %zd", vlen);
+  		return;
+  	}
+  
+diff -cr bluez-4.99.pan.orig/thermometer/thermometer.c bluez-4.99.pan/thermometer/thermometer.c
+*** bluez-4.99.pan.orig/thermometer/thermometer.c	Mon Oct 15 03:10:48 2012
+--- bluez-4.99.pan/thermometer/thermometer.c	Tue Oct 16 14:41:24 2012
+***************
+*** 305,311 ****
+  	struct descriptor *desc = user_data;
+  	uint8_t value[ATT_MAX_MTU];
+  	uint16_t max, min;
+! 	int vlen;
+  
+  	if (status != 0) {
+  		DBG("Valid Range descriptor read failed: %s",
+--- 305,311 ----
+  	struct descriptor *desc = user_data;
+  	uint8_t value[ATT_MAX_MTU];
+  	uint16_t max, min;
+! 	ssize_t vlen;
+  
+  	if (status != 0) {
+  		DBG("Valid Range descriptor read failed: %s",
+***************
+*** 313,319 ****
+  		return;
+  	}
+  
+! 	if (!dec_read_resp(pdu, len, value, &vlen)) {
+  		DBG("Protocol error\n");
+  		return;
+  	}
+--- 313,320 ----
+  		return;
+  	}
+  
+! 	vlen = dec_read_resp(pdu, len, value, sizeof(value));
+! 	if (vlen < 0) {
+  		DBG("Protocol error\n");
+  		return;
+  	}
+***************
+*** 449,455 ****
+  	struct characteristic *ch = user_data;
+  	struct thermometer *t = ch->t;
+  	uint8_t value[ATT_MAX_MTU];
+! 	int vlen;
+  
+  	if (status != 0) {
+  		DBG("Temperature Type value read failed: %s",
+--- 450,456 ----
+  	struct characteristic *ch = user_data;
+  	struct thermometer *t = ch->t;
+  	uint8_t value[ATT_MAX_MTU];
+! 	ssize_t vlen;
+  
+  	if (status != 0) {
+  		DBG("Temperature Type value read failed: %s",
+***************
+*** 457,463 ****
+  		return;
+  	}
+  
+! 	if (!dec_read_resp(pdu, len, value, &vlen)) {
+  		DBG("Protocol error.");
+  		return;
+  	}
+--- 458,465 ----
+  		return;
+  	}
+  
+! 	vlen = dec_read_resp(pdu, len, value, sizeof(value));
+! 	if (vlen < 0) {
+  		DBG("Protocol error.");
+  		return;
+  	}
+***************
+*** 477,483 ****
+  	struct characteristic *ch = user_data;
+  	uint8_t value[ATT_MAX_MTU];
+  	uint16_t interval;
+! 	int vlen;
+  
+  	if (status != 0) {
+  		DBG("Measurement Interval value read failed: %s",
+--- 479,485 ----
+  	struct characteristic *ch = user_data;
+  	uint8_t value[ATT_MAX_MTU];
+  	uint16_t interval;
+! 	ssize_t vlen;
+  
+  	if (status != 0) {
+  		DBG("Measurement Interval value read failed: %s",
+***************
+*** 485,491 ****
+  		return;
+  	}
+  
+! 	if (!dec_read_resp(pdu, len, value, &vlen)) {
+  		DBG("Protocol error\n");
+  		return;
+  	}
+--- 487,494 ----
+  		return;
+  	}
+  
+! 	vlen = dec_read_resp(pdu, len, value, sizeof(value));
+! 	if (vlen < 0) {
+  		DBG("Protocol error\n");
+  		return;
+  	}

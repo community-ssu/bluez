@@ -1,0 +1,32 @@
+author	Gustavo Padovan <gustavo@padovan.org>
+commit	1b64ef1d5ef316088bf7fec86e45d59ecbfefe6e
+	Mon, 23 Apr 2012 10:13:49 +0000 (13:13 +0300)
+
+input: add error message when auth fails
+
+diff -cr bluez-4.99.pan.orig/input/server.c bluez-4.99.pan/input/server.c
+*** bluez-4.99.pan.orig/input/server.c	Mon Jul  4 00:59:05 2011
+--- bluez-4.99.pan/input/server.c	Mon Oct 15 05:22:26 2012
+***************
+*** 148,153 ****
+--- 148,154 ----
+  	struct input_server *server = user_data;
+  	bdaddr_t src, dst;
+  	GError *err = NULL;
++ 	char addr[18];
+  	int ret;
+  
+  	bt_io_get(chan, BT_IO_L2CAP, &err,
+***************
+*** 176,181 ****
+--- 177,186 ----
+  	if (ret == 0)
+  		return;
+  
++ 	ba2str(&src, addr);
++ 	error("input: authorization for %s failed: %s (%d)",
++ 						addr, strerror(-ret), ret);
++ 
+  	g_io_channel_unref(server->confirm);
+  	server->confirm = NULL;
+  

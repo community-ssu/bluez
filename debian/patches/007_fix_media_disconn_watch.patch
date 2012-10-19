@@ -1,0 +1,36 @@
+author	Frédéric Dalleau <frederic.dalleau@linux.intel.co
+commit	5e5cbd0637e8e6107a868673991f5d30453815a8
+	Thu, 8 Mar 2012 23:58:18 +0000 (17:58 -0600)
+
+media: register disconnect watch at transport add
+
+disconnect watch is not removed when the media owner is freed if
+an error occurs while resuming in acquire (id == 0).
+
+diff -cr bluez-4.99.pan.orig/audio/transport.c bluez-4.99.pan/audio/transport.c
+*** bluez-4.99.pan.orig/audio/transport.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/audio/transport.c	Fri Oct 12 07:26:20 2012
+***************
+*** 599,604 ****
+--- 599,607 ----
+  	DBG("Transport %s Owner %s", transport->path, owner->name);
+  	transport->owners = g_slist_append(transport->owners, owner);
+  	owner->transport = transport;
++ 	owner->watch = g_dbus_add_disconnect_watch(transport->conn, owner->name,
++ 							media_owner_exit,
++ 							owner, NULL);
+  }
+  
+  static struct media_owner *media_owner_create(DBusConnection *conn,
+***************
+*** 610,618 ****
+  	owner = g_new0(struct media_owner, 1);
+  	owner->name = g_strdup(dbus_message_get_sender(msg));
+  	owner->accesstype = g_strdup(accesstype);
+- 	owner->watch = g_dbus_add_disconnect_watch(conn, owner->name,
+- 							media_owner_exit,
+- 							owner, NULL);
+  
+  	DBG("Owner created: sender=%s accesstype=%s", owner->name,
+  			accesstype);
+--- 613,618 ----

@@ -1,0 +1,46 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	a7c80bd48dfb8e602981dbb78f4d515111616591
+	Thu, 19 Jul 2012 10:03:39 +0000 (13:03 +0300)
+
+audio: Fix possible crash while exitting
+
+This was probably introduced by a0f543f0eb8ee35f5cfac3b86f0a88e3f01809ff
+as it changes the order now media is unloaded before control causing:
+
+Invalid read of size 8
+   at 0x13D743: media_player_free (media.c:987)
+   by 0x12F942: player_destroy (avrcp.c:1340)
+   by 0x4C94B0C: g_slist_foreach (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x4C94B2A: g_slist_free_full (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x1307E7: avrcp_unregister (avrcp.c:1358)
+   by 0x1249CB: avrcp_server_remove (manager.c:1075)
+   by 0x4C94B0C: g_slist_foreach (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x179124: adapter_remove (adapter.c:2219)
+   by 0x174F81: manager_cleanup (manager.c:285)
+   by 0x11FFA2: main (main.c:391)
+ Address 0x63dc990 is 32 bytes inside a block of size 40 free'd
+   at 0x4A079AE: free (vg_replace_malloc.c:427)
+   by 0x4C7F3CE: g_free (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x122442: remove_interface (object.c:564)
+   by 0x122F89: g_dbus_unregister_interface (object.c:1247)
+   by 0x124CC8: media_server_remove (manager.c:1112)
+   by 0x4C94B0C: g_slist_foreach (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x179124: adapter_remove (adapter.c:2219)
+   by 0x174F81: manager_cleanup (manager.c:285)
+   by 0x11FFA2: main (main.c:391)
+
+diff -cr bluez-4.99.pan.orig/audio/media.c bluez-4.99.pan/audio/media.c
+*** bluez-4.99.pan.orig/audio/media.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/media.c	Tue Oct 16 17:00:42 2012
+***************
+*** 1720,1725 ****
+--- 1720,1728 ----
+  	while (adapter->endpoints)
+  		release_endpoint(adapter->endpoints->data);
+  
++ 	while (adapter->players)
++ 		media_player_destroy(adapter->players->data);
++ 
+  	dbus_connection_unref(adapter->conn);
+  
+  	adapters = g_slist_remove(adapters, adapter);

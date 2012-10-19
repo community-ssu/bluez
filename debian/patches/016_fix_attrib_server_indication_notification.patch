@@ -1,0 +1,25 @@
+author	Vinicius Costa Gomes <vinicius.gomes@openbossa.org>
+commit	b59f7d2e1832d2221c64cd8f717722425c044b92
+	Thu, 15 Mar 2012 13:03:37 +0000 (10:03 -0300)
+
+attrib-server: Fix sending "not supported" for indications/notifications
+
+Now that our Attribute Client is able to handle notifications and
+indications we don't need to respond that they are not supported.
+
+diff -cr bluez-4.99.pan.orig/src/attrib-server.c bluez-4.99.pan/src/attrib-server.c
+*** bluez-4.99.pan.orig/src/attrib-server.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/src/attrib-server.c	Fri Oct 12 08:03:50 2012
+***************
+*** 981,986 ****
+--- 981,990 ----
+  		break;
+  	case ATT_OP_HANDLE_CNF:
+  		return;
++ 	case ATT_OP_HANDLE_IND:
++ 	case ATT_OP_HANDLE_NOTIFY:
++ 		/* The attribute client is already handling these */
++ 		return;
+  	case ATT_OP_READ_MULTI_REQ:
+  	case ATT_OP_PREP_WRITE_REQ:
+  	case ATT_OP_EXEC_WRITE_REQ:

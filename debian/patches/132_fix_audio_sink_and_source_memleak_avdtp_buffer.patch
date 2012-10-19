@@ -1,0 +1,50 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	bff95e0a02b6fa0b760f3e5b27ae9e712638e007
+	Tue, 9 Oct 2012 16:43:51 +0000 (18:43 +0200)
+
+audio: Fix memory leak of AVDTP buffer
+
+Upon disconnection all references to AVDTP session should be release
+otherwise the data associate with it cannot be freed and new connection
+may overwrite the buf pointer causing it to leak.
+
+diff -cr bluez-4.99.pan.orig/audio/sink.c bluez-4.99.pan/audio/sink.c
+*** bluez-4.99.pan.orig/audio/sink.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/sink.c	Wed Oct 17 08:21:39 2012
+***************
+*** 126,131 ****
+--- 126,139 ----
+  		struct sink_state_callback *cb = l->data;
+  		cb->cb(dev, old_state, new_state, cb->user_data);
+  	}
++ 
++ 	if (new_state != SINK_STATE_DISCONNECTED)
++ 		return;
++ 
++ 	if (sink->session) {
++ 		avdtp_unref(sink->session);
++ 		sink->session = NULL;
++ 	}
+  }
+  
+  static void avdtp_state_callback(struct audio_device *dev,
+diff -cr bluez-4.99.pan.orig/audio/source.c bluez-4.99.pan/audio/source.c
+*** bluez-4.99.pan.orig/audio/source.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/source.c	Wed Oct 17 08:22:17 2012
+***************
+*** 117,122 ****
+--- 117,130 ----
+  		struct source_state_callback *cb = l->data;
+  		cb->cb(dev, old_state, new_state, cb->user_data);
+  	}
++ 
++ 	if (new_state != SOURCE_STATE_DISCONNECTED)
++ 		return;
++ 
++ 	if (source->session) {
++ 		avdtp_unref(source->session);
++ 		source->session = NULL;
++ 	}
+  }
+  
+  static void avdtp_state_callback(struct audio_device *dev,

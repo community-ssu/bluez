@@ -1,0 +1,65 @@
+author	Michal Labedzki <michal.labedzki@tieto.com>
+commit	4292c980d37bccade57c241156dd463519fd1bfb
+	Thu, 12 Apr 2012 11:46:39 +0000 (14:46 +0300)
+
+AVRCP: Add missing capability for TrackReachedEnd
+
+Add missing capability for TrackReachedEnd.
+
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	7240dc63d3579b1432237a5df0740947b739d4ea
+	Fri, 13 Apr 2012 09:36:20 +0000 (12:36 +0300)
+
+avrcp: Fix the response ctype of SetPlayerApplicationSettingValue
+
+Request ctype of "SetPlayerApplicationSettingValue" is CONTROL,
+so response should be ACCEPTED instead of STABLE.
+
+diff -cr bluez-4.99.pan.orig/audio/avrcp.c bluez-4.99.pan/audio/avrcp.c
+*** bluez-4.99.pan.orig/audio/avrcp.c	Fri Oct 12 07:34:23 2012
+--- bluez-4.99.pan/audio/avrcp.c	Mon Oct 15 04:00:57 2012
+***************
+*** 557,568 ****
+  
+  		return AVC_CTYPE_STABLE;
+  	case CAP_EVENTS_SUPPORTED:
+! 		pdu->params_len = htons(5);
+! 		pdu->params[1] = 3;
+  		pdu->params[2] = AVRCP_EVENT_STATUS_CHANGED;
+  		pdu->params[3] = AVRCP_EVENT_TRACK_CHANGED;
+  		pdu->params[4] = AVRCP_EVENT_TRACK_REACHED_START;
+  
+  		return AVC_CTYPE_STABLE;
+  	}
+  
+--- 557,569 ----
+  
+  		return AVC_CTYPE_STABLE;
+  	case CAP_EVENTS_SUPPORTED:
+! 		pdu->params[1] = 4;
+  		pdu->params[2] = AVRCP_EVENT_STATUS_CHANGED;
+  		pdu->params[3] = AVRCP_EVENT_TRACK_CHANGED;
+  		pdu->params[4] = AVRCP_EVENT_TRACK_REACHED_START;
++ 		pdu->params[5] = AVRCP_EVENT_TRACK_REACHED_END;
+  
++ 		pdu->params_len = htons(2 + pdu->params[1]);
+  		return AVC_CTYPE_STABLE;
+  	}
+  
+***************
+*** 791,797 ****
+  	if (len) {
+  		pdu->params_len = 0;
+  
+! 		return AVC_CTYPE_STABLE;
+  	}
+  
+  err:
+--- 792,798 ----
+  	if (len) {
+  		pdu->params_len = 0;
+  
+! 		return AVC_CTYPE_ACCEPTED;
+  	}
+  
+  err:

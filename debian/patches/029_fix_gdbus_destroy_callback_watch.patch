@@ -1,0 +1,30 @@
+author	Anderson Lizardo <anderson.lizardo@openbossa.org>
+commit	c4494591c9a0b48b496c0ee76686411556ebfd43
+	Wed, 4 Apr 2012 09:56:51 +0000 (12:56 +0300)
+
+gdbus: Use destroy callback for service watch
+
+Even though service watches accepted a "destroy" callback, they were
+being ignored. This fix properly pass them along so they are called when
+the watch is removed.
+
+diff -cr bluez-4.99.pan.orig/gdbus/watch.c bluez-4.99.pan/gdbus/watch.c
+*** bluez-4.99.pan.orig/gdbus/watch.c	Tue Jan 11 09:51:27 2011
+--- bluez-4.99.pan/gdbus/watch.c	Mon Oct 15 03:05:20 2012
+***************
+*** 660,666 ****
+  	if (name == NULL)
+  		return 0;
+  
+! 	data = filter_data_get(connection, service_filter, NULL, NULL,
+  				DBUS_INTERFACE_DBUS, "NameOwnerChanged",
+  				name);
+  	if (data == NULL)
+--- 660,666 ----
+  	if (name == NULL)
+  		return 0;
+  
+! 	data = filter_data_get(connection, service_filter, NULL, destroy,
+  				DBUS_INTERFACE_DBUS, "NameOwnerChanged",
+  				name);
+  	if (data == NULL)

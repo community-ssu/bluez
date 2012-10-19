@@ -1,0 +1,327 @@
+author	Andre Guedes <andre.guedes@openbossa.org>
+commit	185c7ce8a4f22e9c9ecc9321a853ed8115f5aeaa
+	Thu, 7 Jun 2012 01:27:19 +0000 (04:27 +0300)
+
+gattrib: Fix GAttrib buffer allocation
+
+GAttrib buffer should be allocated according to ATT_MTU value. Over
+BR/EDR, ATT_MTU should be set to the L2CAP imtu negotiated during
+L2CAP configuration phase. Over LE, ATT_MTU should be 23 octets.
+
+author	Andre Guedes <andre.guedes@openbossa.org>
+commit	ea2718060e53386a1b85abe298b20096f067488f
+	Thu, 7 Jun 2012 01:27:24 +0000 (04:27 +0300)
+
+gattrib: Fix g_attrib_set_mtu
+
+23 octets is the default (and minimum) ATT_MTU value. If someone tries
+to set ATT_MTU less than 23 octets g_attrib_set_mtu should fail (return
+FALSE). Additionally, there is no constraint regarding the maximum value
+of ATT_MTU, so we should not check for it.
+
+Also, we should not change the L2CAP ATT fixed channel MTU. bt_io_set
+call will always fail since we are not supposed to change L2CAP MTU
+after connection is established.
+
+author	Andre Guedes <andre.guedes@openbossa.org>
+commit	e3598c492e91405dacb91a18020b29b543f39995
+	Thu, 7 Jun 2012 01:27:28 +0000 (04:27 +0300)
+
+attrib-server: Fix gatt_channel MTU value
+
+In attrib_channel_attach, channel->mtu should be initialized according
+to ATT_MTU value.
+
+Over BR/EDR, ATT_MTU should be set to the L2CAP imtu negotiated during
+L2CAP configuration phase. Over LE, ATT_MTU should be 23 octets.
+
+author	Andre Guedes <andre.guedes@openbossa.org>
+commit	5e4460249a6f00b2ae62894e45f1e515916c87d2
+	Thu, 7 Jun 2012 01:27:32 +0000 (04:27 +0300)
+
+attrib-server: Fix mtu_exchange
+
+If the client requests an ATT_MTU less than the minimum ATT_MTU,
+the server should send an Error Response message with Request Not
+Supported code.
+
+According to GATT spec, the server shall respond to Exchange MTU
+Requests messages with an Exchange MTU Response with the Server
+Rx MTU parameter set to the maximum MTU that this server can
+receive. Thus, we should get L2CAP imtu value in order to properly
+send the Exchange MTU Response message.
+
+Additionally, we should not change the L2CAP ATT fixed channel MTU.
+bt_io_set call will always fail since we are not supposed to change
+L2CAP MTU after connection is established.
+
+author	Andre Guedes <andre.guedes@openbossa.org>
+commit	5d1f47f1b48c68477f8830e83293afef05142629
+	Thu, 7 Jun 2012 01:27:35 +0000 (04:27 +0300)
+
+attrib-server: Update GAttrib buffer after Exchange MTU
+
+We should update the GAttrib buffer length after exchanging ATT_MTU.
+
+author	Andre Guedes <andre.guedes@openbossa.org>
+commit	7125410781ac8b2c0706efa9712846e6ce5b4804
+	Thu, 7 Jun 2012 01:27:43 +0000 (04:27 +0300)
+
+Fix gatt_connect for BR/EDR
+
+Use BT_IO_OPT_IMTU instead of BT_IO_OPT_OMTU in bt_io_connect.
+We cannot control omtu value since it is negotiated during L2CAP
+configuration phase.
+
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	283b4b7d694f276e421b0db823a4905983699255
+	Thu, 7 Jun 2012 06:41:50 +0000 (09:41 +0300)
+
+gattrib: Fix protection of GAttrib while calling callbacks
+
+The callbacks could result with the reference count dropping to 0 and
+the object being freed. This patch fixes the issue by adding one extra
+reference for the duration of the timeout function.
+
+diff -cr bluez-4.99.pan.orig/attrib/gattrib.c bluez-4.99.pan/attrib/gattrib.c
+*** bluez-4.99.pan.orig/attrib/gattrib.c	Mon Oct 15 10:14:23 2012
+--- bluez-4.99.pan/attrib/gattrib.c	Mon Oct 15 10:20:32 2012
+***************
+*** 255,260 ****
+--- 255,262 ----
+  	struct _GAttrib *attrib = data;
+  	struct command *c;
+  
++ 	g_attrib_ref(attrib);
++ 
+  	c = g_queue_pop_head(attrib->requests);
+  	if (c == NULL)
+  		goto done;
+***************
+*** 273,278 ****
+--- 275,282 ----
+  done:
+  	attrib->stale = TRUE;
+  
++ 	g_attrib_unref(attrib);
++ 
+  	return FALSE;
+  }
+  
+***************
+*** 429,443 ****
+  GAttrib *g_attrib_new(GIOChannel *io)
+  {
+  	struct _GAttrib *attrib;
+! 	uint16_t omtu;
+  
+  	g_io_channel_set_encoding(io, NULL, NULL);
+  	g_io_channel_set_buffered(io, FALSE);
+  
+  	attrib = g_try_new0(struct _GAttrib, 1);
+  	if (attrib == NULL)
+  		return NULL;
+  
+  	attrib->io = g_io_channel_ref(io);
+  	attrib->requests = g_queue_new();
+  	attrib->responses = g_queue_new();
+--- 433,466 ----
+  GAttrib *g_attrib_new(GIOChannel *io)
+  {
+  	struct _GAttrib *attrib;
+! 	uint16_t imtu;
+! 	uint16_t att_mtu;
+! 	uint16_t cid;
+! 	GError *gerr = NULL;
+  
+  	g_io_channel_set_encoding(io, NULL, NULL);
+  	g_io_channel_set_buffered(io, FALSE);
+  
++ 	bt_io_get(io, BT_IO_L2CAP, &gerr,
++ 			BT_IO_OPT_IMTU, &imtu,
++ 			BT_IO_OPT_CID, &cid,
++ 			BT_IO_OPT_INVALID);
++ 
++ 	if (gerr) {
++ 		error("%s", gerr->message);
++ 		g_error_free(gerr);
++ 		return NULL;
++ 	}
++ 
+  	attrib = g_try_new0(struct _GAttrib, 1);
+  	if (attrib == NULL)
+  		return NULL;
+  
++ 	att_mtu = (cid == ATT_CID) ? ATT_DEFAULT_LE_MTU : imtu;
++ 
++ 	attrib->buf = g_malloc0(att_mtu);
++ 	attrib->buflen = att_mtu;
++ 
+  	attrib->io = g_io_channel_ref(io);
+  	attrib->requests = g_queue_new();
+  	attrib->responses = g_queue_new();
+***************
+*** 446,462 ****
+  			G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL,
+  			received_data, attrib);
+  
+- 	if (bt_io_get(attrib->io, BT_IO_L2CAP, NULL,
+- 			BT_IO_OPT_OMTU, &omtu,
+- 			BT_IO_OPT_INVALID)) {
+- 		if (omtu == 0 || omtu > ATT_MAX_MTU)
+- 			omtu = ATT_MAX_MTU;
+- 	} else
+- 		omtu = ATT_DEFAULT_LE_MTU;
+- 
+- 	attrib->buf = g_malloc0(omtu);
+- 	attrib->buflen = omtu;
+- 
+  	return g_attrib_ref(attrib);
+  }
+  
+--- 469,474 ----
+***************
+*** 615,628 ****
+  gboolean g_attrib_set_mtu(GAttrib *attrib, int mtu)
+  {
+  	if (mtu < ATT_DEFAULT_LE_MTU)
+- 		mtu = ATT_DEFAULT_LE_MTU;
+- 
+- 	if (mtu > ATT_MAX_MTU)
+- 		mtu = ATT_MAX_MTU;
+- 
+- 	if (!bt_io_set(attrib->io, BT_IO_L2CAP, NULL,
+- 			BT_IO_OPT_OMTU, mtu,
+- 			BT_IO_OPT_INVALID))
+  		return FALSE;
+  
+  	attrib->buf = g_realloc(attrib->buf, mtu);
+--- 627,632 ----
+diff -cr bluez-4.99.pan.orig/attrib/utils.c bluez-4.99.pan/attrib/utils.c
+*** bluez-4.99.pan.orig/attrib/utils.c	Mon Oct 15 10:04:58 2012
+--- bluez-4.99.pan/attrib/utils.c	Mon Oct 15 10:27:42 2012
+***************
+*** 94,100 ****
+  				BT_IO_OPT_SOURCE_BDADDR, &sba,
+  				BT_IO_OPT_DEST_BDADDR, &dba,
+  				BT_IO_OPT_PSM, psm,
+! 				BT_IO_OPT_OMTU, mtu,
+  				BT_IO_OPT_SEC_LEVEL, sec,
+  				BT_IO_OPT_INVALID);
+  
+--- 94,100 ----
+  				BT_IO_OPT_SOURCE_BDADDR, &sba,
+  				BT_IO_OPT_DEST_BDADDR, &dba,
+  				BT_IO_OPT_PSM, psm,
+! 				BT_IO_OPT_IMTU, mtu,
+  				BT_IO_OPT_SEC_LEVEL, sec,
+  				BT_IO_OPT_INVALID);
+  
+diff -cr bluez-4.99.pan.orig/src/attrib-server.c bluez-4.99.pan/src/attrib-server.c
+*** bluez-4.99.pan.orig/src/attrib-server.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/attrib-server.c	Mon Oct 15 10:26:18 2012
+***************
+*** 849,866 ****
+  static uint16_t mtu_exchange(struct gatt_channel *channel, uint16_t mtu,
+  		uint8_t *pdu, int len)
+  {
+! 	guint old_mtu = channel->mtu;
+  
+  	if (mtu < ATT_DEFAULT_LE_MTU)
+! 		channel->mtu = ATT_DEFAULT_LE_MTU;
+! 	else
+! 		channel->mtu = MIN(mtu, channel->mtu);
+  
+! 	bt_io_set(channel->server->le_io, BT_IO_L2CAP, NULL,
+! 			BT_IO_OPT_OMTU, channel->mtu,
+  			BT_IO_OPT_INVALID);
+  
+! 	return enc_mtu_resp(old_mtu, pdu, len);
+  }
+  
+  static void channel_remove(struct gatt_channel *channel)
+--- 849,876 ----
+  static uint16_t mtu_exchange(struct gatt_channel *channel, uint16_t mtu,
+  		uint8_t *pdu, int len)
+  {
+! 	GError *gerr = NULL;
+! 	GIOChannel *io;
+! 	uint16_t imtu;
+  
+  	if (mtu < ATT_DEFAULT_LE_MTU)
+! 		return enc_error_resp(ATT_OP_MTU_REQ, 0,
+! 					ATT_ECODE_REQ_NOT_SUPP, pdu, len);
+  
+! 	io = g_attrib_get_channel(channel->attrib);
+! 
+! 	bt_io_get(io, BT_IO_L2CAP, &gerr,
+! 			BT_IO_OPT_IMTU, &imtu,
+  			BT_IO_OPT_INVALID);
+  
+! 	if (gerr)
+! 		return enc_error_resp(ATT_OP_MTU_REQ, 0,
+! 					ATT_ECODE_UNLIKELY, pdu, len);
+! 
+! 	channel->mtu = MIN(mtu, imtu);
+! 	g_attrib_set_mtu(channel->attrib, channel->mtu);
+! 
+! 	return enc_mtu_resp(imtu, pdu, len);
+  }
+  
+  static void channel_remove(struct gatt_channel *channel)
+***************
+*** 1015,1020 ****
+--- 1025,1031 ----
+  	GError *gerr = NULL;
+  	char addr[18];
+  	uint16_t cid;
++ 	guint mtu = 0;
+  
+  	io = g_attrib_get_channel(attrib);
+  
+***************
+*** 1024,1030 ****
+  			BT_IO_OPT_SOURCE_BDADDR, &channel->src,
+  			BT_IO_OPT_DEST_BDADDR, &channel->dst,
+  			BT_IO_OPT_CID, &cid,
+! 			BT_IO_OPT_OMTU, &channel->mtu,
+  			BT_IO_OPT_INVALID);
+  	if (gerr) {
+  		error("bt_io_get: %s", gerr->message);
+--- 1035,1041 ----
+  			BT_IO_OPT_SOURCE_BDADDR, &channel->src,
+  			BT_IO_OPT_DEST_BDADDR, &channel->dst,
+  			BT_IO_OPT_CID, &cid,
+! 			BT_IO_OPT_IMTU, &mtu,
+  			BT_IO_OPT_INVALID);
+  	if (gerr) {
+  		error("bt_io_get: %s", gerr->message);
+***************
+*** 1051,1063 ****
+  	if (device == NULL || device_is_bonded(device) == FALSE)
+  		delete_device_ccc(&channel->src, &channel->dst);
+  
+! 	if (channel->mtu > ATT_MAX_MTU)
+! 		channel->mtu = ATT_MAX_MTU;
+! 
+! 	if (cid != ATT_CID)
+  		channel->le = FALSE;
+! 	else
+  		channel->le = TRUE;
+  
+  
+  	channel->attrib = g_attrib_ref(attrib);
+--- 1062,1074 ----
+  	if (device == NULL || device_is_bonded(device) == FALSE)
+  		delete_device_ccc(&channel->src, &channel->dst);
+  
+! 	if (cid != ATT_CID) {
+  		channel->le = FALSE;
+! 		channel->mtu = mtu;
+! 	} else {
+  		channel->le = TRUE;
++ 		channel->mtu = ATT_DEFAULT_LE_MTU;
++ 	}
+  
+  
+  	channel->attrib = g_attrib_ref(attrib);

@@ -1,0 +1,58 @@
+author	Paulo Alcantara <paulo.alcantara@openbossa.org>
+commit	147dad195ebeb7398ff6e6f901314997448fed45
+	Wed, 30 May 2012 07:31:03 +0000 (10:31 +0300)
+
+agent: Fix segmentation fault
+
+This patch fixes a segmentation fault when the agent leaves the bus
+and there is a request passkey pending.
+
+bluetoothd[3137]: src/agent.c:agent_exited() Agent exited without
+calling Unregister
+==3137== Invalid read of size 8
+==3137==    at 0x4489E7: device_get_adapter (device.c:2197)
+==3137==    by 0x448C69: passkey_cb (device.c:2757)
+==3137==    by 0x43FA47: agent_free (agent.c:168)
+==3137==    by 0x40A738: service_filter (watch.c:477)
+==3137==    by 0x40A450: message_filter (watch.c:527)
+==3137==    by 0x516451B: dbus_connection_dispatch (in
+/usr/lib64/libdbus-1.so.3.5.8)
+==3137==    by 0x409387: message_dispatch (mainloop.c:76)
+==3137==    by 0x4E7986A: g_timeout_dispatch (in
+/usr/lib64/libglib-2.0.so.0.3000.2)
+==3137==    by 0x4E78091: g_main_context_dispatch (in
+/usr/lib64/libglib-2.0.so.0.3000.2)
+==3137==    by 0x4E78887: g_main_context_iterate.clone.6 (in
+/usr/lib64/libglib-2.0.so.0.3000.2)
+==3137==    by 0x4E78DD9: g_main_loop_run (in
+/usr/lib64/libglib-2.0.so.0.3000.2)
+==3137==    by 0x431AA6: main (main.c:542)
+==3137==  Address 0xe818247c89102594 is not stack'd, malloc'd or
+(recently) free'd
+
+diff -cr bluez-4.99.pan.orig/src/agent.c bluez-4.99.pan/src/agent.c
+*** bluez-4.99.pan.orig/src/agent.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/agent.c	Mon Oct 15 08:58:27 2012
+***************
+*** 152,157 ****
+--- 152,158 ----
+  	if (agent->request) {
+  		DBusError err;
+  		agent_pincode_cb pincode_cb;
++ 		agent_passkey_cb passkey_cb;
+  		agent_cb cb;
+  
+  		dbus_error_init(&err);
+***************
+*** 162,167 ****
+--- 163,172 ----
+  			pincode_cb = agent->request->cb;
+  			pincode_cb(agent, &err, NULL, agent->request->user_data);
+  			break;
++ 		case AGENT_REQUEST_PASSKEY:
++ 			passkey_cb = agent->request->cb;
++ 			passkey_cb(agent, &err, 0, agent->request->user_data);
++ 			break;
+  		default:
+  			cb = agent->request->cb;
+  			cb(agent, &err, agent->request->user_data);

@@ -1,0 +1,29 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	d0f08e050a36fa6092ac151541f51b7d15768784
+	Mon, 15 Oct 2012 10:10:41 +0000 (13:10 +0300)
+
+media: Fix leaking endpoint in case of failure to register SEP
+
+This can happen in case of AudioSink and/or AudioSource are disabled in
+audio.conf.
+
+diff -cr bluez-4.99.pan.orig/audio/media.c bluez-4.99.pan/audio/media.c
+*** bluez-4.99.pan.orig/audio/media.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/media.c	Wed Oct 17 13:09:02 2012
+***************
+*** 706,712 ****
+  	return endpoint;
+  
+  failed:
+! 	g_free(endpoint);
+  	return NULL;
+  }
+  
+--- 706,712 ----
+  	return endpoint;
+  
+  failed:
+! 	media_endpoint_destroy(endpoint);
+  	return NULL;
+  }
+  

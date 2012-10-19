@@ -1,0 +1,230 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	c5bf6d662b9cf3d2ebd7559c10098a199f1b7bd0
+	Fri, 15 Jun 2012 14:48:52 +0000 (17:48 +0300)
+
+audio: Fix handling of A2DP suspend indication
+
+When accepting the suspend indication all callbacks should be notified
+that suspend completed.
+
+In addition to this fix not using avdtp_start return in indication
+callback as well as in the confirmation.
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>	
+commit	ef539d84618d5b5af9d9bb224c900140e38408e9
+	Fri, 15 Jun 2012 14:49:25 +0000 (17:49 +0300)
+
+audio: Fix handling of A2DP open indication
+
+When accepting the open indication all config callbacks should be
+notified that open completed.
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	c1b89146424569d1fdeeb3bba6624fe9977fd65e
+	Fri, 15 Jun 2012 14:49:33 +0000 (17:49 +0300)
+
+audio: Fix handling of A2DP start indication
+
+Only process callbacks if avdtp_start was sent, otherwise it may cancel
+setup callbacks that were registere via g_idle_add.
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	4503dba4ba28299c83aa320a95e988c74b67eaa8
+	Fri, 15 Jun 2012 14:49:42 +0000 (17:49 +0300)
+
+audio: Fix handling of A2DP abort indication
+
+When an abort is received all setup callbacks should return an error.
+
+diff -cr bluez-4.99.pan.orig/audio/a2dp.c bluez-4.99.pan/audio/a2dp.c
+*** bluez-4.99.pan.orig/audio/a2dp.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/audio/a2dp.c	Mon Oct 15 11:19:42 2012
+***************
+*** 884,894 ****
+--- 884,905 ----
+  				void *user_data)
+  {
+  	struct a2dp_sep *a2dp_sep = user_data;
++ 	struct a2dp_setup *setup;
+  
+  	if (a2dp_sep->type == AVDTP_SEP_TYPE_SINK)
+  		DBG("Sink %p: Open_Ind", sep);
+  	else
+  		DBG("Source %p: Open_Ind", sep);
++ 
++ 	setup = find_setup_by_session(session);
++ 	if (!setup)
++ 		return TRUE;
++ 
++ 	if (setup->reconfigure)
++ 		setup->reconfigure = FALSE;
++ 
++ 	finalize_config(setup);
++ 
+  	return TRUE;
+  }
+  
+***************
+*** 944,953 ****
+  	else
+  		DBG("Source %p: Start_Ind", sep);
+  
+- 	setup = find_setup_by_session(session);
+- 	if (setup)
+- 		finalize_resume(setup);
+- 
+  	if (!a2dp_sep->locked) {
+  		a2dp_sep->session = avdtp_ref(session);
+  		a2dp_sep->suspend_timer = g_timeout_add_seconds(SUSPEND_TIMEOUT,
+--- 955,960 ----
+***************
+*** 955,960 ****
+--- 962,976 ----
+  						a2dp_sep);
+  	}
+  
++ 	if (!a2dp_sep->starting)
++ 		return TRUE;
++ 
++ 	a2dp_sep->starting = FALSE;
++ 
++ 	setup = find_setup_by_session(session);
++ 	if (setup)
++ 		finalize_resume(setup);
++ 
+  	return TRUE;
+  }
+  
+***************
+*** 970,975 ****
+--- 986,993 ----
+  	else
+  		DBG("Source %p: Start_Cfm", sep);
+  
++ 	a2dp_sep->starting = FALSE;
++ 
+  	setup = find_setup_by_session(session);
+  	if (!setup)
+  		return;
+***************
+*** 987,992 ****
+--- 1005,1013 ----
+  				void *user_data)
+  {
+  	struct a2dp_sep *a2dp_sep = user_data;
++ 	struct a2dp_setup *setup;
++ 	gboolean start;
++ 	int start_err;
+  
+  	if (a2dp_sep->type == AVDTP_SEP_TYPE_SINK)
+  		DBG("Sink %p: Suspend_Ind", sep);
+***************
+*** 1000,1005 ****
+--- 1021,1050 ----
+  		a2dp_sep->session = NULL;
+  	}
+  
++ 	if (!a2dp_sep->suspending)
++ 		return TRUE;
++ 
++ 	a2dp_sep->suspending = FALSE;
++ 
++ 	setup = find_setup_by_session(session);
++ 	if (!setup)
++ 		return TRUE;
++ 
++ 	start = setup->start;
++ 	setup->start = FALSE;
++ 
++ 	finalize_suspend(setup);
++ 
++ 	if (!start)
++ 		return TRUE;
++ 
++ 	start_err = avdtp_start(session, a2dp_sep->stream);
++ 	if (start_err < 0) {
++ 		error("avdtp_start: %s (%d)", strerror(-start_err),
++ 								-start_err);
++ 		finalize_setup_errno(setup, start_err, finalize_resume);
++ 	}
++ 
+  	return TRUE;
+  }
+  
+***************
+*** 1010,1016 ****
+  	struct a2dp_sep *a2dp_sep = user_data;
+  	struct a2dp_setup *setup;
+  	gboolean start;
+! 	int perr;
+  
+  	if (a2dp_sep->type == AVDTP_SEP_TYPE_SINK)
+  		DBG("Sink %p: Suspend_Cfm", sep);
+--- 1055,1061 ----
+  	struct a2dp_sep *a2dp_sep = user_data;
+  	struct a2dp_setup *setup;
+  	gboolean start;
+! 	int start_err;
+  
+  	if (a2dp_sep->type == AVDTP_SEP_TYPE_SINK)
+  		DBG("Sink %p: Suspend_Cfm", sep);
+***************
+*** 1041,1050 ****
+  		return;
+  	}
+  
+! 	perr = avdtp_start(session, a2dp_sep->stream);
+! 	if (perr < 0) {
+! 		error("Error on avdtp_start %s (%d)", strerror(-perr), -perr);
+! 		finalize_setup_errno(setup, -EIO, finalize_suspend, NULL);
+  	}
+  }
+  
+--- 1086,1095 ----
+  		return;
+  	}
+  
+! 	start_err = avdtp_start(session, a2dp_sep->stream);
+! 	if (start_err < 0) {
+! 		error("avdtp_start %s (%d)", strerror(-start_err), -start_err);
+! 		finalize_setup_errno(setup, start_err, finalize_suspend, NULL);
+  	}
+  }
+  
+***************
+*** 1164,1169 ****
+--- 1182,1188 ----
+  				void *user_data)
+  {
+  	struct a2dp_sep *a2dp_sep = user_data;
++ 	struct a2dp_setup *setup;
+  
+  	if (a2dp_sep->type == AVDTP_SEP_TYPE_SINK)
+  		DBG("Sink %p: Abort_Ind", sep);
+***************
+*** 1172,1177 ****
+--- 1191,1204 ----
+  
+  	a2dp_sep->stream = NULL;
+  
++ 	setup = find_setup_by_session(session);
++ 	if (!setup)
++ 		return TRUE;
++ 
++ 	finalize_setup_errno(setup, -ECONNRESET, finalize_suspend,
++ 							finalize_resume,
++ 							finalize_config);
++ 
+  	return TRUE;
+  }
+  
+***************
+*** 2206,2211 ****
+--- 2233,2239 ----
+  			error("avdtp_start failed");
+  			goto failed;
+  		}
++ 		sep->starting = TRUE;
+  		break;
+  	case AVDTP_STATE_STREAMING:
+  		if (!sep->suspending && sep->suspend_timer) {

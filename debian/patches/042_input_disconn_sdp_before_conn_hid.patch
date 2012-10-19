@@ -1,0 +1,253 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	0e6d3c9bbdc19ffa85b9b404d2bb31d8b81b3df0
+	Fri, 13 Apr 2012 10:21:55 +0000 (13:21 +0300)
+
+sdp-client: Add ability to clear cached session
+
+This will be usefull for disconnecting SDP L2CAP channel before cached
+session timeout fires.
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	18b018f65f37e18c24467853f1689a27b456b0e9
+	Fri, 13 Apr 2012 10:21:58 +0000 (13:21 +0300)
+
+input: Disconnect SDP before connecting HID if HIDSDPDisable is set
+
+If remote HID device has HIDSDPDisable attribute present and set to
+true host should disconnect SDP channel before connecting HID control
+channel. Such devices multiplex resources between SDP and HID L2CAP
+channels and will reject connection to HID control channel if SDP
+channel is already connected.
+
+diff -cr bluez-4.99.pan.orig/input/device.c bluez-4.99.pan/input/device.c
+*** bluez-4.99.pan.orig/input/device.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/input/device.c	Mon Oct 15 04:43:11 2012
+***************
+*** 56,61 ****
+--- 56,63 ----
+  #include "fakehid.h"
+  #include "btio.h"
+  
++ #include "sdp-client.h"
++ 
+  #define INPUT_DEVICE_INTERFACE "org.bluez.Input"
+  
+  #define BUF_SIZE		16
+***************
+*** 84,89 ****
+--- 86,92 ----
+  	bdaddr_t		dst;
+  	uint32_t		handle;
+  	guint			dc_id;
++ 	gboolean		disable_sdp;
+  	char			*name;
+  	struct btd_device	*device;
+  	GSList			*connections;
+***************
+*** 936,941 ****
+--- 939,947 ----
+  		/* HID devices */
+  		GIOChannel *io;
+  
++ 		if (idev->disable_sdp)
++ 			bt_clear_cached_session(&idev->src, &idev->dst);
++ 
+  		io = bt_io_connect(BT_IO_L2CAP, control_connect_cb, iconn,
+  					NULL, &err,
+  					BT_IO_OPT_SOURCE_BDADDR, &idev->src,
+***************
+*** 1034,1040 ****
+  static struct input_device *input_device_new(DBusConnection *conn,
+  					struct btd_device *device, const char *path,
+  					const bdaddr_t *src, const bdaddr_t *dst,
+! 					const uint32_t handle)
+  {
+  	struct input_device *idev;
+  	char name[249], src_addr[18], dst_addr[18];
+--- 1040,1046 ----
+  static struct input_device *input_device_new(DBusConnection *conn,
+  					struct btd_device *device, const char *path,
+  					const bdaddr_t *src, const bdaddr_t *dst,
+! 					const uint32_t handle, gboolean disable_sdp)
+  {
+  	struct input_device *idev;
+  	char name[249], src_addr[18], dst_addr[18];
+***************
+*** 1046,1051 ****
+--- 1052,1058 ----
+  	idev->path = g_strdup(path);
+  	idev->conn = dbus_connection_ref(conn);
+  	idev->handle = handle;
++ 	idev->disable_sdp = disable_sdp;
+  
+  	ba2str(src, src_addr);
+  	ba2str(dst, dst_addr);
+***************
+*** 1082,1098 ****
+  	return iconn;
+  }
+  
+  int input_device_register(DBusConnection *conn, struct btd_device *device,
+  			const char *path, const bdaddr_t *src,
+  			const bdaddr_t *dst, const char *uuid,
+! 			uint32_t handle, int timeout)
+  {
+  	struct input_device *idev;
+  	struct input_conn *iconn;
+  
+  	idev = find_device_by_path(devices, path);
+  	if (!idev) {
+! 		idev = input_device_new(conn, device, path, src, dst, handle);
+  		if (!idev)
+  			return -EINVAL;
+  		devices = g_slist_append(devices, idev);
+--- 1089,1115 ----
+  	return iconn;
+  }
+  
++ static gboolean is_device_sdp_disable(const sdp_record_t *rec)
++ {
++ 	sdp_data_t *data;
++ 
++ 	data = sdp_data_get(rec, SDP_ATTR_HID_SDP_DISABLE);
++ 
++ 	return data && data->val.uint8;
++ }
++ 
+  int input_device_register(DBusConnection *conn, struct btd_device *device,
+  			const char *path, const bdaddr_t *src,
+  			const bdaddr_t *dst, const char *uuid,
+! 			const sdp_record_t *rec, int timeout)
+  {
+  	struct input_device *idev;
+  	struct input_conn *iconn;
+  
+  	idev = find_device_by_path(devices, path);
+  	if (!idev) {
+! 		idev = input_device_new(conn, device, path, src, dst,
+! 				rec->handle, is_device_sdp_disable(rec));
+  		if (!idev)
+  			return -EINVAL;
+  		devices = g_slist_append(devices, idev);
+***************
+*** 1116,1122 ****
+  
+  	idev = find_device_by_path(devices, path);
+  	if (!idev) {
+! 		idev = input_device_new(conn, device, path, src, dst, 0);
+  		if (!idev)
+  			return -EINVAL;
+  		devices = g_slist_append(devices, idev);
+--- 1133,1140 ----
+  
+  	idev = find_device_by_path(devices, path);
+  	if (!idev) {
+! 		idev = input_device_new(conn, device, path, src, dst, 0,
+! 								FALSE);
+  		if (!idev)
+  			return -EINVAL;
+  		devices = g_slist_append(devices, idev);
+diff -cr bluez-4.99.pan.orig/input/device.h bluez-4.99.pan/input/device.h
+*** bluez-4.99.pan.orig/input/device.h	Wed Sep  8 11:27:53 2010
+--- bluez-4.99.pan/input/device.h	Mon Oct 15 04:44:18 2012
+***************
+*** 48,54 ****
+  int input_device_register(DBusConnection *conn, struct btd_device *device,
+  			const char *path, const bdaddr_t *src,
+  			const bdaddr_t *dst, const char *uuid,
+! 			uint32_t handle, int timeout);
+  int input_device_unregister(const char *path, const char *uuid);
+  
+  int input_device_set_channel(const bdaddr_t *src, const bdaddr_t *dst, int psm,
+--- 48,54 ----
+  int input_device_register(DBusConnection *conn, struct btd_device *device,
+  			const char *path, const bdaddr_t *src,
+  			const bdaddr_t *dst, const char *uuid,
+! 			const sdp_record_t *rec, int timeout);
+  int input_device_unregister(const char *path, const char *uuid);
+  
+  int input_device_set_channel(const bdaddr_t *src, const bdaddr_t *dst, int psm,
+diff -cr bluez-4.99.pan.orig/input/manager.c bluez-4.99.pan/input/manager.c
+*** bluez-4.99.pan.orig/input/manager.c	Wed Jan 11 17:44:59 2012
+--- bluez-4.99.pan/input/manager.c	Mon Oct 15 04:45:26 2012
+***************
+*** 72,78 ****
+  	device_get_address(device, &dst, NULL);
+  
+  	return input_device_register(connection, device, path, &src, &dst,
+! 				HID_UUID, rec->handle, idle_timeout * 60);
+  }
+  
+  static void hid_device_remove(struct btd_device *device)
+--- 72,78 ----
+  	device_get_address(device, &dst, NULL);
+  
+  	return input_device_register(connection, device, path, &src, &dst,
+! 				HID_UUID, rec, idle_timeout * 60);
+  }
+  
+  static void hid_device_remove(struct btd_device *device)
+diff -cr bluez-4.99.pan.orig/src/sdp-client.c bluez-4.99.pan/src/sdp-client.c
+*** bluez-4.99.pan.orig/src/sdp-client.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/sdp-client.c	Mon Oct 15 04:37:17 2012
+***************
+*** 61,67 ****
+  	return FALSE;
+  }
+  
+! static sdp_session_t *get_sdp_session(const bdaddr_t *src, const bdaddr_t *dst)
+  {
+  	GSList *l;
+  
+--- 61,67 ----
+  	return FALSE;
+  }
+  
+! static sdp_session_t *get_cached_sdp_session(const bdaddr_t *src, const bdaddr_t *dst)
+  {
+  	GSList *l;
+  
+***************
+*** 82,87 ****
+--- 82,98 ----
+  		return session;
+  	}
+  
++ 	return NULL;
++ }
++ 
++ static sdp_session_t *get_sdp_session(const bdaddr_t *src, const bdaddr_t *dst)
++ {
++ 	sdp_session_t *session;
++ 
++ 	session = get_cached_sdp_session(src, dst);
++ 	if (session)
++ 		return session;
++ 
+  	return sdp_connect(src, dst, SDP_NON_BLOCKING);
+  }
+  
+***************
+*** 367,369 ****
+--- 378,388 ----
+  	return 0;
+  }
+  
++ void bt_clear_cached_session(const bdaddr_t *src, const bdaddr_t *dst)
++ {
++ 	sdp_session_t *session;
++ 
++ 	session = get_cached_sdp_session(src, dst);
++ 	if (session)
++ 		sdp_close(session);
++ }
+diff -cr bluez-4.99.pan.orig/src/sdp-client.h bluez-4.99.pan/src/sdp-client.h
+*** bluez-4.99.pan.orig/src/sdp-client.h	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/sdp-client.h	Mon Oct 15 04:37:46 2012
+***************
+*** 28,30 ****
+--- 28,31 ----
+  			uuid_t *uuid, bt_callback_t cb, void *user_data,
+  			bt_destroy_t destroy);
+  int bt_cancel_discovery(const bdaddr_t *src, const bdaddr_t *dst);
++ void bt_clear_cached_session(const bdaddr_t *src, const bdaddr_t *dst);

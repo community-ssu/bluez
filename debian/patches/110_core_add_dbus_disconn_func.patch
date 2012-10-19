@@ -1,0 +1,35 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	6d73ad9a1cdc11d4f0159b4610312d68ffc71f20
+	Mon, 3 Sep 2012 11:10:14 +0000 (14:10 +0300)
+
+core: Add D-Bus disconnect function for easier detection
+
+diff -cr bluez-4.99.pan.orig/src/main.c bluez-4.99.pan/src/main.c
+*** bluez-4.99.pan.orig/src/main.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/main.c	Tue Oct 16 18:14:34 2012
+***************
+*** 396,401 ****
+--- 396,407 ----
+  	dbus_connection_unref(conn);
+  }
+  
++ static void disconnected_dbus(DBusConnection *conn, void *data)
++ {
++ 	info("Disconnected from D-Bus. Exiting.");
++ 	g_main_loop_quit(event_loop);
++ }
++ 
+  static int connect_dbus(void)
+  {
+  	DBusConnection *conn;
+***************
+*** 418,423 ****
+--- 424,431 ----
+  
+  	set_dbus_connection(conn);
+  
++ 	g_dbus_set_disconnect_function(conn, disconnected_dbus, NULL, NULL);
++ 
+  	return 0;
+  }
+  

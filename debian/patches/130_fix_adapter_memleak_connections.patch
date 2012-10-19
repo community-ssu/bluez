@@ -1,0 +1,37 @@
+author	Lucas De Marchi <lucas.demarchi@profusion.mobi>
+commit	fc67e0ca0658239b3778f6cbbd5cc778a1544714
+	Thu, 4 Oct 2012 18:20:59 +0000 (21:20 +0300)
+
+core: Fix leaking connection list nodes
+
+==480== HEAP SUMMARY:
+==480==     in use at exit: 62,418 bytes in 355 blocks
+==480==   total heap usage: 11,134 allocs, 10,779 frees, 5,254,068 bytes allocated
+==480==
+==480== 16 bytes in 1 blocks are definitely lost in loss record 70 of 250
+==480==    at 0x4C2C04B: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+==480==    by 0x4E80050: g_malloc (in /usr/lib/libglib-2.0.so.0.3200.4)
+==480==    by 0x4E94442: g_slice_alloc (in /usr/lib/libglib-2.0.so.0.3200.4)
+==480==    by 0x4E95792: g_slist_append (in /usr/lib/libglib-2.0.so.0.3200.4)
+==480==    by 0x17E483: adapter_add_connection (adapter.c:3245)
+==480==    by 0x187FDF: btd_event_conn_complete (event.c:470)
+==480==    by 0x18B72D: mgmt_event.part.36 (mgmt.c:515)
+==480==    by 0x4E7A474: g_main_context_dispatch (in /usr/lib/libglib-2.0.so.0.3200.4)
+==480==    by 0x4E7A7A7: ??? (in /usr/lib/libglib-2.0.so.0.3200.4)
+==480==    by 0x4E7ABA1: g_main_loop_run (in /usr/lib/libglib-2.0.so.0.3200.4)
+==480==    by 0x1216B1: main (main.c:551)
+
+diff -cr bluez-4.99.pan.orig/src/adapter.c bluez-4.99.pan/src/adapter.c
+*** bluez-4.99.pan.orig/src/adapter.c	Tue Oct 16 19:20:41 2012
+--- bluez-4.99.pan/src/adapter.c	Wed Oct 17 08:01:04 2012
+***************
+*** 2366,2371 ****
+--- 2366,2373 ----
+  
+  	g_slist_free(adapter->oor_devices);
+  
++ 	g_slist_free(adapter->connections);
++ 
+  	g_free(adapter->path);
+  	g_free(adapter->name);
+  	g_free(adapter);

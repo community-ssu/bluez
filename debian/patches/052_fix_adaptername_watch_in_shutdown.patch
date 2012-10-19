@@ -1,0 +1,72 @@
+author	Bastien Nocera <hadess@hadess.net>
+commit	a521540ca0f807b51ea881d5de7fb60bba592ffa
+	Sun, 29 Apr 2012 19:39:47 +0000 (22:39 +0300)
+
+Fix adaptername shutdown
+
+An inotify watch descriptor isn't a file descriptor, so don't
+treat it as such and remove it properly.
+
+diff -cr bluez-4.99.pan.orig/plugins/adaptername.c bluez-4.99.pan/plugins/adaptername.c
+*** bluez-4.99.pan.orig/plugins/adaptername.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/plugins/adaptername.c	Mon Oct 15 05:33:49 2012
+***************
+*** 52,58 ****
+  #define MACHINE_INFO_FILE "machine-info"
+  
+  static GIOChannel *inotify = NULL;
+! static int watch_fd = -1;
+  
+  /* This file is part of systemd's hostnamed functionality:
+   * http://0pointer.de/public/systemd-man/machine-info.html
+--- 52,58 ----
+  #define MACHINE_INFO_FILE "machine-info"
+  
+  static GIOChannel *inotify = NULL;
+! static int watch_d = -1;
+  
+  /* This file is part of systemd's hostnamed functionality:
+   * http://0pointer.de/public/systemd-man/machine-info.html
+***************
+*** 292,299 ****
+  	mask |= IN_MOVED_FROM;
+  	mask |= IN_MOVED_TO;
+  
+! 	watch_fd = inotify_add_watch(inot_fd, MACHINE_INFO_DIR, mask);
+! 	if (watch_fd < 0) {
+  		error("Failed to setup watch for '%s'", MACHINE_INFO_DIR);
+  		close(inot_fd);
+  		return 0;
+--- 292,299 ----
+  	mask |= IN_MOVED_FROM;
+  	mask |= IN_MOVED_TO;
+  
+! 	watch_d = inotify_add_watch(inot_fd, MACHINE_INFO_DIR, mask);
+! 	if (watch_d < 0) {
+  		error("Failed to setup watch for '%s'", MACHINE_INFO_DIR);
+  		close(inot_fd);
+  		return 0;
+***************
+*** 310,318 ****
+  
+  static void adaptername_exit(void)
+  {
+- 	if (watch_fd >= 0)
+- 		close(watch_fd);
+  	if (inotify != NULL) {
+  		g_io_channel_shutdown(inotify, FALSE, NULL);
+  		g_io_channel_unref(inotify);
+  	}
+--- 310,321 ----
+  
+  static void adaptername_exit(void)
+  {
+  	if (inotify != NULL) {
++ 		if (watch_d >= 0) {
++ 			int inot_fd = g_io_channel_unix_get_fd(inotify);
++ 			inotify_rm_watch(inot_fd, watch_d);
++ 		}
++ 
+  		g_io_channel_shutdown(inotify, FALSE, NULL);
+  		g_io_channel_unref(inotify);
+  	}

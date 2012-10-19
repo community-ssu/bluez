@@ -1,0 +1,23 @@
+author	Hemant Gupta <hemant.gupta@stericsson.com>
+commit	7c824c9b7a2fe76cd03a3ef0ec7914d472ae2247
+	Wed, 4 Apr 2012 10:02:39 +0000 (13:02 +0300)
+
+Adapter: Fix Discovering state while Powering Off
+
+This patch fixes the adapter discovering state while powering off.
+Without this fix, BlueZ sends incorrect discovering state to upper
+layers while switching off.
+
+diff -cr bluez-4.99.pan.orig/src/adapter.c bluez-4.99.pan/src/adapter.c
+*** bluez-4.99.pan.orig/src/adapter.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/adapter.c	Mon Oct 15 03:16:56 2012
+***************
+*** 2320,2325 ****
+--- 2320,2326 ----
+  	emit_property_changed(connection, adapter->path, ADAPTER_INTERFACE,
+  				"Powered", DBUS_TYPE_BOOLEAN, &prop_false);
+  
++ 	adapter->discovering = FALSE;
+  	adapter->scan_mode = SCAN_DISABLED;
+  	adapter->mode = MODE_OFF;
+  	adapter->off_requested = FALSE;

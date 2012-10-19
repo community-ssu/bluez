@@ -1,0 +1,24 @@
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	14131675502b14fc83b59b12573c2e88ade1e467
+	Fri, 30 Mar 2012 10:23:20 +0000 (13:23 +0300)
+
+attrib: Fix missing D-Bus message unref on DiscoverCharacteristics
+
+This patch fixes a missing message unref when DiscoverCharacteristics on
+Generic Attribute finishes.
+
+diff -cr bluez-4.99.pan.orig/attrib/client.c bluez-4.99.pan/attrib/client.c
+*** bluez-4.99.pan.orig/attrib/client.c	Wed Jan 11 17:44:59 2012
+--- bluez-4.99.pan/attrib/client.c	Mon Oct 15 02:48:03 2012
+***************
+*** 886,891 ****
+--- 886,894 ----
+  	g_slist_foreach(gatt->chars, update_all_chars, gatt);
+  
+  fail:
++ 	dbus_message_unref(gatt->query->msg);
++ 	gatt->query->msg = NULL;
++ 
+  	g_dbus_send_message(gatt->conn, reply);
+  	query_list_remove(gatt, current);
+  	g_free(current);

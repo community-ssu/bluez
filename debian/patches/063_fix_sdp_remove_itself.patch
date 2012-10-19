@@ -1,0 +1,25 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	2d4a0e42822172a2ed5d9d1499e17467beb9a4ac
+	Fri, 18 May 2012 17:25:45 +0000 (20:25 +0300)
+
+sdp: Fix removing servers own record
+
+To avoid misbehaving plugins trying to remove handle 0 it's better to
+directly check for this and return EINVAL.
+
+diff -cr bluez-4.99.pan.orig/src/sdpd-service.c bluez-4.99.pan/src/sdpd-service.c
+*** bluez-4.99.pan.orig/src/sdpd-service.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/sdpd-service.c	Mon Oct 15 07:51:55 2012
+***************
+*** 276,281 ****
+--- 276,285 ----
+  {
+  	sdp_record_t *rec;
+  
++ 	/* Refuse to remove the server's own record */
++ 	if (handle == SDP_SERVER_RECORD_HANDLE)
++ 		return -EINVAL;
++ 
+  	DBG("Removing record with handle 0x%05x", handle);
+  
+  	rec = sdp_record_find(handle);

@@ -1,0 +1,40 @@
+author	Chan-yeol Park <chanyeol.park@samsung.com>
+commit	86a2831d609c03b66afe4133f78fe3f417c5f125
+	Mon, 3 Sep 2012 11:50:51 +0000 (14:50 +0300)
+
+network: Fix bnep setup failure handle bug
+
+This patch initializes rsp varialbe again for the remain failure
+procedure.
+
+diff -cr bluez-4.99.pan.orig/network/server.c bluez-4.99.pan/network/server.c
+*** bluez-4.99.pan.orig/network/server.c	Fri Oct 12 06:49:58 2012
+--- bluez-4.99.pan/network/server.c	Fri Oct 12 06:53:14 2012
+***************
+*** 354,360 ****
+  		return BNEP_CONN_INVALID_SVC;
+  	}
+  
+! 	return 0;
+  }
+  
+  static void session_free(void *data)
+--- 354,360 ----
+  		return BNEP_CONN_INVALID_SVC;
+  	}
+  
+! 	return BNEP_SUCCESS;
+  }
+  
+  static void session_free(void *data)
+***************
+*** 436,441 ****
+--- 436,443 ----
+  	if (rsp)
+  		goto reply;
+  
++ 	rsp = BNEP_CONN_NOT_ALLOWED;
++ 
+  	ns = find_server(na->servers, dst_role);
+  	if (!ns) {
+  		error("Server unavailable: (0x%x)", dst_role);

@@ -1,0 +1,46 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	4f656c7052b04cf3432a45ae4c042ac084f8d2d3
+	Fri, 21 Sep 2012 12:12:30 +0000 (15:12 +0300)
+
+network: Fix DBusMessage leaks
+
+diff -cr bluez-4.99.pan.orig/network/connection.c bluez-4.99.pan/network/connection.c
+*** bluez-4.99.pan.orig/network/connection.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/network/connection.c	Fri Oct 12 06:57:03 2012
+***************
+*** 160,168 ****
+  		nc->watch = 0;
+  	}
+  
+! 	if (nc->msg && err_msg) {
+! 		reply = btd_error_failed(nc->msg, err_msg);
+! 		g_dbus_send_message(connection, reply);
+  	}
+  
+  	g_io_channel_shutdown(nc->io, TRUE, NULL);
+--- 160,172 ----
+  		nc->watch = 0;
+  	}
+  
+! 	if (nc->msg) {
+! 		if(err_msg) {
+! 			reply = btd_error_failed(nc->msg, err_msg);
+! 			g_dbus_send_message(connection, reply);
+! 		}
+! 		dbus_message_unref(nc->msg);
+! 		nc->msg = NULL;
+  	}
+  
+  	g_io_channel_shutdown(nc->io, TRUE, NULL);
+***************
+*** 271,276 ****
+--- 275,283 ----
+  			DBUS_TYPE_STRING, &pdev,
+  			DBUS_TYPE_INVALID);
+  
++ 	dbus_message_unref(nc->msg);
++ 	nc->msg = NULL;
++ 
+  	connected = TRUE;
+  	emit_property_changed(connection, nc->peer->path,
+  				NETWORK_PEER_INTERFACE, "Connected",

@@ -1,0 +1,41 @@
+author	Slawomir Bochenski <lkslawek@gmail.com>
+commit	2053eeda325bc3f93359f8a3af780ac7c0f991f6
+	Thu, 28 Jun 2012 10:51:00 +0000 (13:51 +0300)
+
+lib/sdp.c: Prevent passing unitialised argument
+
+In case of sdp_seq_alloc() failures in loop, unitialised seqDTDs would
+be passed to final sdp_seq_alloc.
+
+diff -cr bluez-4.99.pan.orig/lib/sdp.c bluez-4.99.pan/lib/sdp.c
+*** bluez-4.99.pan.orig/lib/sdp.c	Mon Oct 15 08:20:14 2012
+--- bluez-4.99.pan/lib/sdp.c	Tue Oct 16 15:08:48 2012
+***************
+*** 2528,2538 ****
+  		dtds[1] = &uint16;
+  		values[1] = &profile->version;
+  		seq = sdp_seq_alloc(dtds, values, 2);
+! 		if (seq) {
+! 			seqDTDs[i] = &seq->dtd;
+! 			seqs[i] = seq;
+! 			sdp_pattern_add_uuid(rec, &profile->uuid);
+  		}
+  		i++;
+  	}
+  	if (status == 0) {
+--- 2528,2542 ----
+  		dtds[1] = &uint16;
+  		values[1] = &profile->version;
+  		seq = sdp_seq_alloc(dtds, values, 2);
+! 
+! 		if (seq == NULL) {
+! 			status = -1;
+! 			break;
+  		}
++ 
++ 		seqDTDs[i] = &seq->dtd;
++ 		seqs[i] = seq;
++ 		sdp_pattern_add_uuid(rec, &profile->uuid);
+  		i++;
+  	}
+  	if (status == 0) {

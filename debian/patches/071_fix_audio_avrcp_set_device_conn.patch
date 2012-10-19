@@ -1,0 +1,32 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	ea5e0da40ee8dac9665c098e252b5c762b061870
+	Fri, 25 May 2012 07:41:42 +0000 (10:41 +0300)
+
+AVRCP: Fix not setting audio device connected to player
+
+While connecting device should be set to match the AVCTP session and when
+disconnected reset it back to NULL.
+
+diff -cr bluez-4.99.pan.orig/audio/avrcp.c bluez-4.99.pan/audio/avrcp.c
+*** bluez-4.99.pan.orig/audio/avrcp.c	Mon Oct 15 04:03:07 2012
+--- bluez-4.99.pan/audio/avrcp.c	Mon Oct 15 08:49:03 2012
+***************
+*** 1122,1127 ****
+--- 1122,1128 ----
+  	switch (new_state) {
+  	case AVCTP_STATE_DISCONNECTED:
+  		player->session = NULL;
++ 		player->dev = NULL;
+  		player->registered_events = 0;
+  
+  		if (player->handler) {
+***************
+*** 1132,1137 ****
+--- 1133,1139 ----
+  		break;
+  	case AVCTP_STATE_CONNECTING:
+  		player->session = avctp_connect(&dev->src, &dev->dst);
++ 		player->dev = dev;
+  
+  		if (!player->handler)
+  			player->handler = avctp_register_pdu_handler(

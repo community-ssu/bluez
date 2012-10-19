@@ -1,0 +1,37 @@
+author	Vinicius Costa Gomes <vinicius.gomes@openbossa.org>
+commit	4c3dec8abfde7e16494b552a4a777ef28866dc40
+	Thu, 11 Oct 2012 06:34:34 +0000 (08:34 +0200)
+
+gattrib: Fix ignoring the error message when write fails
+
+If an error happens during writing to the socket, we should complain
+that it failed.
+
+diff -cr bluez-4.99.pan.orig/attrib/gattrib.c bluez-4.99.pan/attrib/gattrib.c
+*** bluez-4.99.pan.orig/attrib/gattrib.c	Tue Oct 16 14:44:12 2012
+--- bluez-4.99.pan/attrib/gattrib.c	Wed Oct 17 08:31:10 2012
+***************
+*** 314,321 ****
+  
+  	iostat = g_io_channel_write_chars(io, (gchar *) cmd->pdu, cmd->len,
+  								&len, &gerr);
+! 	if (iostat != G_IO_STATUS_NORMAL)
+  		return FALSE;
+  
+  	if (cmd->expected == 0) {
+  		g_queue_pop_head(queue);
+--- 314,327 ----
+  
+  	iostat = g_io_channel_write_chars(io, (gchar *) cmd->pdu, cmd->len,
+  								&len, &gerr);
+! 	if (iostat != G_IO_STATUS_NORMAL) {
+! 		if (gerr) {
+! 			error("%s", gerr->message);
+! 			g_error_free(gerr);
+! 		}
+! 
+  		return FALSE;
++ 	}
+  
+  	if (cmd->expected == 0) {
+  		g_queue_pop_head(queue);

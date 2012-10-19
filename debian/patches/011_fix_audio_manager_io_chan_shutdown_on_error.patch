@@ -1,0 +1,60 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	817b2577f81092a37120e507c323c643cd65e6a9
+	Tue, 13 Mar 2012 13:53:34 +0000 (15:53 +0200)
+
+audio: fix io channel shutdown on error
+
+In the unlikely case of service record allocation error, the io channel
+should be properly shut down.
+
+diff -cr bluez-4.99.pan.orig/audio/manager.c bluez-4.99.pan/audio/manager.c
+*** bluez-4.99.pan.orig/audio/manager.c	Fri Oct 12 07:45:05 2012
+--- bluez-4.99.pan/audio/manager.c	Fri Oct 12 07:46:55 2012
+***************
+*** 755,775 ****
+  	record = hfp_hs_record(chan);
+  	if (!record) {
+  		error("Unable to allocate new service record");
+! 		return -1;
+  	}
+  
+  	if (add_record_to_server(&src, record) < 0) {
+  		error("Unable to register HFP HS service record");
+  		sdp_record_free(record);
+! 		g_io_channel_shutdown(adapter->hfp_hs_server, TRUE, NULL);
+! 		g_io_channel_unref(adapter->hfp_hs_server);
+! 		adapter->hfp_hs_server = NULL;
+! 		return -1;
+  	}
+  
+  	adapter->hfp_hs_record_id = record->handle;
+  
+  	return 0;
+  }
+  
+  static int audio_probe(struct btd_device *device, GSList *uuids)
+--- 755,778 ----
+  	record = hfp_hs_record(chan);
+  	if (!record) {
+  		error("Unable to allocate new service record");
+! 		goto failed;
+  	}
+  
+  	if (add_record_to_server(&src, record) < 0) {
+  		error("Unable to register HFP HS service record");
+  		sdp_record_free(record);
+! 		goto failed;
+  	}
+  
+  	adapter->hfp_hs_record_id = record->handle;
+  
+  	return 0;
++ 
++ failed:
++ 	g_io_channel_shutdown(adapter->hfp_hs_server, TRUE, NULL);
++ 	g_io_channel_unref(adapter->hfp_hs_server);
++ 	adapter->hfp_hs_server = NULL;
++ 	return -1;
+  }
+  
+  static int audio_probe(struct btd_device *device, GSList *uuids)

@@ -1,0 +1,93 @@
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	cc4838e601df2daee66dfd94c264cface3e67651
+	Sat, 2 Jun 2012 01:09:52 +0000 (09:09 +0800)
+
+core: Fix repeated connection attempt
+
+This patch fixes possible repeated connections attempt to the same
+remote device when there is an attempt pending, since device drivers
+can request independently ATT connections.
+
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	6f338a8f6ab1b79aa9e7066054bec7b4668cfa23
+	Sat, 2 Jun 2012 01:10:10 +0000 (09:10 +0800)
+
+core: Fix connected callback not being called
+
+ATTIO callbacks are not being added in the list when there is a
+connection attempt pending.
+
+author	Claudio Takahasi <claudio.takahasi@openbossa.org>
+commit	29405cc587e83b921fce761d876f582b90b618b0
+	Sat, 2 Jun 2012 01:10:31 +0000 (09:10 +0800)
+
+core: Remove pending connection attempt
+
+Fix connection attempt being triggered after device is removed. Pending
+ATT re-connection attempt should be cancelled when all ATTIO callbacks
+are unregistered.
+
+diff -cr bluez-4.99.pan.orig/src/device.c bluez-4.99.pan/src/device.c
+*** bluez-4.99.pan.orig/src/device.c	Mon Oct 15 09:35:42 2012
+--- bluez-4.99.pan/src/device.c	Mon Oct 15 09:41:21 2012
+***************
+*** 2934,2956 ****
+  	attio->dcfunc = dcfunc;
+  	attio->user_data = user_data;
+  
+! 	if (device->attrib) {
+! 		if (cfunc) {
+! 			device->attios_offline =
+! 				g_slist_append(device->attios_offline, attio);
+! 
+! 			g_idle_add(notify_attios, device);
+! 		} else {
+! 			device->attios = g_slist_append(device->attios, attio);
+! 		}
+! 	} else {
+  		device->auto_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+  						att_connect, device,
+  						att_connect_dispatched);
+  
+- 		device->attios = g_slist_append(device->attios, attio);
+- 	}
+- 
+  	return attio->id;
+  }
+  
+--- 2934,2954 ----
+  	attio->dcfunc = dcfunc;
+  	attio->user_data = user_data;
+  
+! 	if (device->attrib && cfunc) {
+! 		device->attios_offline = g_slist_append(device->attios_offline,
+! 									attio);
+! 
+! 		g_idle_add(notify_attios, device);
+! 		return attio->id;
+! 	}
+! 
+! 	device->attios = g_slist_append(device->attios, attio);
+! 
+! 	if (device->auto_id == 0)
+  		device->auto_id = g_idle_add_full(G_PRIORITY_DEFAULT_IDLE,
+  						att_connect, device,
+  						att_connect_dispatched);
+  
+  	return attio->id;
+  }
+  
+***************
+*** 2988,2993 ****
+--- 2986,2996 ----
+  	if (device->attios != NULL || device->attios_offline != NULL)
+  		return TRUE;
+  
++ 	if (device->auto_id) {
++ 		g_source_remove(device->auto_id);
++ 		device->auto_id = 0;
++ 	}
++ 
+  	att_cleanup(device);
+  
+  	return TRUE;

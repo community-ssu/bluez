@@ -1,0 +1,38 @@
+author	Arik Nemtsov <arik@wizery.com>
+commit	a86eae7fef9819317f591ee11b6e140c0c424f94
+	Thu, 15 Mar 2012 08:17:52 +0000 (08:17 +0000)
+
+Revert "core: Add provision for terminating an ATT connection"
+
+This reverts commit f89a77478af78d41c80ab7605662382b9e4e1c36.
+
+This is not needed and actually introduces a bug. When the "Disconnect"
+API of device is called device->attrib is unref-ed via a watch set on
+G_IO_HUP. The channel is shutdown when the last reference is removed.
+
+The code introduced here shuts down the channel and prevents the watch
+from getting called. This means we leak a reference to device->attrib.
+This can cause a number of bad things. For example, if the device is
+temporary, it will never be freed, and we won't be able to pair to it
+again.
+
+diff -cr bluez-4.99.pan.orig/src/device.c bluez-4.99.pan/src/device.c
+*** bluez-4.99.pan.orig/src/device.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/src/device.c	Fri Oct 12 07:57:52 2012
+***************
+*** 821,834 ****
+  		browse_request_cancel(device->browse);
+  	}
+  
+- 	if (device->attrib) {
+- 		GIOChannel *io = g_attrib_get_channel(device->attrib);
+- 		if (io) {
+- 			g_io_channel_shutdown(io, FALSE, NULL);
+- 			g_io_channel_unref(io);
+- 		}
+- 	}
+- 
+  	if (msg)
+  		device->disconnects = g_slist_append(device->disconnects,
+  						dbus_message_ref(msg));
+--- 821,826 ----

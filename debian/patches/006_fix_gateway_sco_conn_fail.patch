@@ -1,0 +1,46 @@
+author	Frédéric Dalleau <frederic.dalleau@linux.intel.co
+commit	4afb762ce4f0c3756ead8d57826a89617d8bef55
+	Thu, 8 Mar 2012 23:58:18 +0000 (17:58 -0600)
+
+gateway: Fix crash if SCO connection fails
+
+In some situations, a connect callback is created, but
+this callback is not added to media_owner. Thus when the owner
+is destroyed and at rfcomm disconnect, the callback is executed
+with an invalid pointer.
+
+diff -cr bluez-4.99.pan.orig/audio/gateway.c bluez-4.99.pan/audio/gateway.c
+*** bluez-4.99.pan.orig/audio/gateway.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/audio/gateway.c	Fri Oct 12 07:20:58 2012
+***************
+*** 836,847 ****
+  				gateway_stream_cb_t cb, void *user_data)
+  {
+  	struct gateway *gw = dev->gateway;
+- 	unsigned int id;
+  	GError *err = NULL;
+  	GIOChannel *io;
+  
+- 	id = connect_cb_new(gw, cb, user_data);
+- 
+  	if (!gw->rfcomm)
+  		get_records(dev);
+  	else if (!gw->sco) {
+--- 836,844 ----
+***************
+*** 858,864 ****
+  	} else
+  		g_idle_add(request_stream_cb, dev);
+  
+! 	return id;
+  }
+  
+  int gateway_config_stream(struct audio_device *dev, gateway_stream_cb_t cb,
+--- 855,861 ----
+  	} else
+  		g_idle_add(request_stream_cb, dev);
+  
+! 	return connect_cb_new(gw, cb, user_data);
+  }
+  
+  int gateway_config_stream(struct audio_device *dev, gateway_stream_cb_t cb,

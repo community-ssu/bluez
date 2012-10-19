@@ -1,0 +1,75 @@
+author	Anderson Lizardo <anderson.lizardo@openbossa.org>
+commit	bb29d9a4ff7f1eb37fd8521efaf6965edc5b5ae3
+	Mon, 13 Aug 2012 10:23:53 +0000 (13:23 +0300)
+
+monitor: Fix endianness conversion
+
+Flags field has 32-bit size. Same issue was fixed for mgmtops in
+1801a4d45d74c29cebacaab79a07e9961300be41.
+
+author	Anderson Lizardo <anderson.lizardo@openbossa.org>
+commit	6ade0ff7a226c9a06e14b6d364f2fae652337e75
+	Mon, 13 Aug 2012 10:26:54 +0000 (13:26 +0300)
+
+btmgmt: Fix endianness conversion
+
+Flags field has 32-bit size. Same issue was fixed for mgmtops in
+1801a4d45d74c29cebacaab79a07e9961300be41.
+
+diff -cr bluez-4.99.pan.orig/mgmt/main.c bluez-4.99.pan/mgmt/main.c
+*** bluez-4.99.pan.orig/mgmt/main.c	Mon Oct 15 10:38:00 2012
+--- bluez-4.99.pan/mgmt/main.c	Tue Oct 16 17:26:41 2012
+***************
+*** 461,467 ****
+  		return -EINVAL;
+  	}
+  
+! 	flags = btohs(ev->flags);
+  
+  	eir_len = bt_get_le16(&ev->eir_len);
+  	if (len != sizeof(*ev) + eir_len) {
+--- 461,467 ----
+  		return -EINVAL;
+  	}
+  
+! 	flags = btohl(ev->flags);
+  
+  	eir_len = bt_get_le16(&ev->eir_len);
+  	if (len != sizeof(*ev) + eir_len) {
+diff -cr bluez-4.99.pan.orig/monitor/control.c bluez-4.99.pan/monitor/control.c
+*** bluez-4.99.pan.orig/monitor/control.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/monitor/control.c	Tue Oct 16 17:24:57 2012
+***************
+*** 210,216 ****
+  		return;
+  	}
+  
+! 	flags = btohs(ev->flags);
+  	ba2str(&ev->addr.bdaddr, str);
+  
+  	printf("@ Device Connected: %s (%d) flags 0x%4.4x\n",
+--- 210,216 ----
+  		return;
+  	}
+  
+! 	flags = btohl(ev->flags);
+  	ba2str(&ev->addr.bdaddr, str);
+  
+  	printf("@ Device Connected: %s (%d) flags 0x%4.4x\n",
+***************
+*** 357,363 ****
+  		return;
+  	}
+  
+! 	flags = btohs(ev->flags);
+  	ba2str(&ev->addr.bdaddr, str);
+  
+  	printf("@ Device Found: %s (%d) rssi %d flags 0x%4.4x\n",
+--- 357,363 ----
+  		return;
+  	}
+  
+! 	flags = btohl(ev->flags);
+  	ba2str(&ev->addr.bdaddr, str);
+  
+  	printf("@ Device Found: %s (%d) rssi %d flags 0x%4.4x\n",

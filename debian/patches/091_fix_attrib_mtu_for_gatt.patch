@@ -1,0 +1,20 @@
+diff -cr bluez-4.99.pan.orig/src/attrib-server.c bluez-4.99.pan/src/attrib-server.c
+*** bluez-4.99.pan.orig/src/attrib-server.c	Mon Oct 15 10:32:29 2012
+--- bluez-4.99.pan/src/attrib-server.c	Tue Oct 16 14:52:59 2012
+***************
+*** 892,898 ****
+  							gpointer user_data)
+  {
+  	struct gatt_channel *channel = user_data;
+! 	uint8_t opdu[ATT_MAX_MTU], value[ATT_MAX_MTU];
+  	uint16_t length, start, end, mtu, offset;
+  	bt_uuid_t uuid;
+  	uint8_t status = 0;
+--- 892,898 ----
+  							gpointer user_data)
+  {
+  	struct gatt_channel *channel = user_data;
+! 	uint8_t opdu[channel->mtu], value[ATT_MAX_MTU];
+  	uint16_t length, start, end, mtu, offset;
+  	bt_uuid_t uuid;
+  	uint8_t status = 0;

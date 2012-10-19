@@ -1,0 +1,127 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	3b3e88678a5fd117897178c9dc53345781661a60
+	Tue, 5 Jun 2012 12:11:50 +0000 (15:11 +0300)
+
+gattrib: Fix command timeout handling
+
+This patch fixes command timeout handling. Previously attrib_destroy was
+explicitly called which ignored any reference holders. This patch fixes
+the issue by first passing errors to command callbacks and after that
+marking the GAttrib object as stale so no further operations can be
+done.
+
+diff -cr bluez-4.99.pan.orig/attrib/att.c bluez-4.99.pan/attrib/att.c
+*** bluez-4.99.pan.orig/attrib/att.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/attrib/att.c	Mon Oct 15 09:52:42 2012
+***************
+*** 72,77 ****
+--- 72,81 ----
+  		return "Insufficient Resources to complete the request";
+  	case ATT_ECODE_IO:
+  		return "Internal application error: I/O";
++ 	case ATT_ECODE_TIMEOUT:
++ 		return "A timeout occured";
++ 	case ATT_ECODE_ABORTED:
++ 		return "The operation was aborted";
+  	default:
+  		return "Unexpected error code";
+  	}
+diff -cr bluez-4.99.pan.orig/attrib/att.h bluez-4.99.pan/attrib/att.h
+*** bluez-4.99.pan.orig/attrib/att.h	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/attrib/att.h	Mon Oct 15 09:53:34 2012
+***************
+*** 94,99 ****
+--- 94,101 ----
+  #define ATT_ECODE_UNSUPP_GRP_TYPE		0x10
+  #define ATT_ECODE_INSUFF_RESOURCES		0x11
+  /* Application error */
++ #define ATT_ECODE_ABORTED			0xFD
++ #define ATT_ECODE_TIMEOUT			0xFE
+  #define ATT_ECODE_IO				0xFF
+  
+  /* Characteristic Property bit field */
+diff -cr bluez-4.99.pan.orig/attrib/gattrib.c bluez-4.99.pan/attrib/gattrib.c
+*** bluez-4.99.pan.orig/attrib/gattrib.c	Mon Oct 15 09:32:04 2012
+--- bluez-4.99.pan/attrib/gattrib.c	Mon Oct 15 09:57:39 2012
+***************
+*** 53,58 ****
+--- 53,59 ----
+  	guint next_evt_id;
+  	GDestroyNotify destroy;
+  	gpointer destroy_user_data;
++ 	gboolean stale;
+  };
+  
+  struct command {
+***************
+*** 252,259 ****
+  static gboolean disconnect_timeout(gpointer data)
+  {
+  	struct _GAttrib *attrib = data;
+  
+! 	attrib_destroy(attrib);
+  
+  	return FALSE;
+  }
+--- 253,277 ----
+  static gboolean disconnect_timeout(gpointer data)
+  {
+  	struct _GAttrib *attrib = data;
++ 	struct command *c;
+  
+! 	c = g_queue_pop_head(attrib->requests);
+! 	if (c == NULL)
+! 		goto done;
+! 
+! 	if (c->func)
+! 		c->func(ATT_ECODE_TIMEOUT, NULL, 0, c->user_data);
+! 
+! 	command_destroy(c);
+! 
+! 	while ((c = g_queue_pop_head(attrib->requests))) {
+! 		if (c->func)
+! 			c->func(ATT_ECODE_ABORTED, NULL, 0, c->user_data);
+! 		command_destroy(c);
+! 	}
+! 	
+! done:
+! 	attrib->stale = TRUE;
+  
+  	return FALSE;
+  }
+***************
+*** 268,273 ****
+--- 286,294 ----
+  	GIOStatus iostat;
+  	GQueue *queue;
+  
++ 	if (attrib->stale)
++ 		return FALSE;
++ 
+  	if (cond & (G_IO_HUP | G_IO_ERR | G_IO_NVAL))
+  		return FALSE;
+  
+***************
+*** 333,338 ****
+--- 354,362 ----
+  	GIOStatus iostat;
+  	gboolean norequests, noresponses;
+  
++ 	if (attrib->stale)
++ 		return FALSE;
++ 
+  	if (attrib->timeout_watch > 0) {
+  		g_source_remove(attrib->timeout_watch);
+  		attrib->timeout_watch = 0;
+***************
+*** 443,448 ****
+--- 467,475 ----
+  	struct command *c;
+  	GQueue *queue;
+  
++ 	if (attrib->stale)
++ 		return FALSE;
++ 
+  	c = g_try_new0(struct command, 1);
+  	if (c == NULL)
+  		return 0;

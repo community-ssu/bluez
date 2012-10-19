@@ -1,0 +1,45 @@
+author	Ido Yariv <ido@wizery.com>
+commit	33523ab31c54cb5c961a13202a3d0b64168dfab3
+	Thu, 7 Jun 2012 01:25:06 +0000 (04:25 +0300)
+
+gattrib: Fix a premature response timer removal
+
+A timer is set when a response is expected. The timer is removed when
+data is received, regardless of whether or not the data is a response.
+As a result, the timer may be cleared even though a response was not
+received and there would be no way to detect a command timeout.
+
+Fix this by clearing the timer only after verifying a response was
+received.
+
+diff -cr bluez-4.99.pan.orig/attrib/gattrib.c bluez-4.99.pan/attrib/gattrib.c
+*** bluez-4.99.pan.orig/attrib/gattrib.c	Mon Oct 15 10:04:58 2012
+--- bluez-4.99.pan/attrib/gattrib.c	Mon Oct 15 10:13:06 2012
+***************
+*** 357,367 ****
+  	if (attrib->stale)
+  		return FALSE;
+  
+- 	if (attrib->timeout_watch > 0) {
+- 		g_source_remove(attrib->timeout_watch);
+- 		attrib->timeout_watch = 0;
+- 	}
+- 
+  	if (cond & (G_IO_HUP | G_IO_ERR | G_IO_NVAL)) {
+  		attrib->read_watch = 0;
+  		return FALSE;
+--- 357,362 ----
+***************
+*** 389,394 ****
+--- 384,394 ----
+  	if (is_response(buf[0]) == FALSE)
+  		return TRUE;
+  
++ 	if (attrib->timeout_watch > 0) {
++ 		g_source_remove(attrib->timeout_watch);
++ 		attrib->timeout_watch = 0;
++ 	}
++ 
+  	cmd = g_queue_pop_head(attrib->requests);
+  	if (cmd == NULL) {
+  		/* Keep the watch if we have events to report */

@@ -1,0 +1,33 @@
+author	Anderson Lizardo <anderson.lizardo@openbossa.org>
+commit	7bc00be49668aaa52612af1825e006417211bc22
+	Wed, 28 Mar 2012 09:39:57 +0000 (12:39 +0300)
+
+event: Store Class of Device after connection
+
+The Class of Device is usually sent on the EIR returned by the Device
+Connected mgmt event. For hciops, the Class of Device is always NULL on
+the connection complete event.
+
+The stored Class of Device is used later for Class/Icon device
+properties.
+
+diff -cr bluez-4.99.pan.orig/src/event.c bluez-4.99.pan/src/event.c
+*** bluez-4.99.pan.orig/src/event.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/src/event.c	Fri Oct 12 08:46:38 2012
+***************
+*** 455,460 ****
+--- 455,468 ----
+  
+  	update_lastused(local, peer);
+  
++ 	if (dev_class != NULL) {
++ 		uint32_t class = dev_class[0] | (dev_class[1] << 8) |
++ 							(dev_class[2] << 16);
++ 
++ 		if (class != 0)
++ 			write_remote_class(local, peer, class);
++ 	}
++ 
+  	device_set_addr_type(device, type);
+  
+  	adapter_add_connection(adapter, device);

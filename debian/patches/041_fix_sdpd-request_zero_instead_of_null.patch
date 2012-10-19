@@ -1,0 +1,26 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	deea134fbaa09111f10e2d27560813d3c1258931
+	Fri, 13 Apr 2012 09:43:45 +0000 (12:43 +0300)
+
+sdpd-request: Fix passing zero instead of NULL
+
+diff -cr bluez-4.99.pan.orig/src/sdpd-request.c bluez-4.99.pan/src/sdpd-request.c
+*** bluez-4.99.pan.orig/src/sdpd-request.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/sdpd-request.c	Mon Oct 15 04:25:18 2012
+***************
+*** 748,754 ****
+  			cstate_size = sdp_set_cstate_pdu(buf, &newState);
+  		} else {
+  			if (buf->data_size == 0)
+! 				sdp_append_to_buf(buf, 0, 0);
+  			cstate_size = sdp_set_cstate_pdu(buf, NULL);
+  		}
+  	}
+--- 748,754 ----
+  			cstate_size = sdp_set_cstate_pdu(buf, &newState);
+  		} else {
+  			if (buf->data_size == 0)
+! 				sdp_append_to_buf(buf, NULL, 0);
+  			cstate_size = sdp_set_cstate_pdu(buf, NULL);
+  		}
+  	}

@@ -1,0 +1,29 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	a9b567a98da11f2c64a6e1d01b9329ed89217b95
+	Tue, 28 Aug 2012 17:29:16 +0000 (10:29 -0700)
+
+sdp: Fix error reporting in sdp_service_search_attr_req
+
+This function reports error code via errno not return value.
+
+diff -cr bluez-4.99.pan.orig/lib/sdp.c bluez-4.99.pan/lib/sdp.c
+*** bluez-4.99.pan.orig/lib/sdp.c	Tue Oct 16 15:10:10 2012
+--- bluez-4.99.pan/lib/sdp.c	Tue Oct 16 18:11:43 2012
+***************
+*** 4349,4355 ****
+  	seqlen = gen_attridseq_pdu(pdata, attrids,
+  		reqtype == SDP_ATTR_REQ_INDIVIDUAL ? SDP_UINT16 : SDP_UINT32);
+  	if (seqlen == -1) {
+! 		status = EINVAL;
+  		goto end;
+  	}
+  	pdata += seqlen;
+--- 4349,4356 ----
+  	seqlen = gen_attridseq_pdu(pdata, attrids,
+  		reqtype == SDP_ATTR_REQ_INDIVIDUAL ? SDP_UINT16 : SDP_UINT32);
+  	if (seqlen == -1) {
+! 		errno = EINVAL;
+! 		status = -1;
+  		goto end;
+  	}
+  	pdata += seqlen;

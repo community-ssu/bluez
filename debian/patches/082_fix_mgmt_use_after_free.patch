@@ -1,0 +1,21 @@
+author	Szymon Janc <szymon@janc.net.pl>
+commit	1da4a66054272a628c08907be257a115016a29ae
+	Thu, 7 Jun 2012 15:34:45 +0000 (23:34 +0800)
+
+btmgmt: Fix use after free in mgmt_check_pending
+
+Break loop when pending command was found and callback called.
+
+diff -cr bluez-4.99.pan.orig/mgmt/main.c bluez-4.99.pan/mgmt/main.c
+*** bluez-4.99.pan.orig/mgmt/main.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/mgmt/main.c	Mon Oct 15 10:36:43 2012
+***************
+*** 141,146 ****
+--- 141,147 ----
+  		c->cb(mgmt_sk, op, index, status, data, len, c->user_data);
+  
+  		free(c);
++ 		break;
+  	}
+  }
+  

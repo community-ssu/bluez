@@ -1,0 +1,34 @@
+author	Johan Hovold <jhovold@gmail.com>
+commit	870fb2619d1ddecef84f374e37e94a76d24cf1d7
+	Thu, 10 May 2012 23:39:57 +0000 (16:39 -0700)
+
+csr_bcsp: fix link establishment
+
+The current link-establishment implementation times out if a packet is
+not received after the link is active (i.e. reception of CONF_RESP).
+
+Fix by making sure that the link establishment loop in open is
+terminated when ubcsp sets the UBCSP_PACKET_SENT flag (on reception of
+CONF_RESP) rather than UBCSP_PACKET_RECEIVED (on reception of any later
+packages).
+
+diff -cr bluez-4.99.pan.orig/tools/csr_bcsp.c bluez-4.99.pan/tools/csr_bcsp.c
+*** bluez-4.99.pan.orig/tools/csr_bcsp.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/tools/csr_bcsp.c	Mon Oct 15 08:00:24 2012
+***************
+*** 118,124 ****
+  	while (1) {
+  		delay = ubcsp_poll(&activity);
+  
+! 		if (activity & UBCSP_PACKET_RECEIVED)
+  			break;
+  
+  		if (delay) {
+--- 118,124 ----
+  	while (1) {
+  		delay = ubcsp_poll(&activity);
+  
+! 		if (activity & UBCSP_PACKET_SENT)
+  			break;
+  
+  		if (delay) {

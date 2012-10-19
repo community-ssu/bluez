@@ -1,0 +1,36 @@
+author	Chen Ganir <chen.ganir@ti.com>
+commit	ef136177b7e0719f18af64d045391f70b9cc2530
+	Tue, 15 May 2012 07:56:57 +0000 (10:56 +0300)
+
+eir: Keep parsed eir_data on error
+
+Do not discard already parsed eir_data on eir data length error.
+Data corruption may occur, but this does not mean that we need
+to ignore already parsed valid eir data.
+
+diff -cr bluez-4.99.pan.orig/src/eir.c bluez-4.99.pan/src/eir.c
+*** bluez-4.99.pan.orig/src/eir.c	Mon Oct 15 05:11:37 2012
+--- bluez-4.99.pan/src/eir.c	Mon Oct 15 07:35:25 2012
+***************
+*** 115,125 ****
+  
+  		len += field_len + 1;
+  
+! 		/* Bail out if got incorrect length */
+! 		if (len > eir_len) {
+! 			eir_data_free(eir);
+! 			return -EINVAL;
+! 		}
+  
+  		data_len = field_len - 1;
+  
+--- 115,123 ----
+  
+  		len += field_len + 1;
+  
+! 		/* Do not continue EIR Data parsing if got incorrect length */
+! 		if (len > eir_len)
+! 			break;
+  
+  		data_len = field_len - 1;
+  

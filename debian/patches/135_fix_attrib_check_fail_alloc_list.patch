@@ -1,0 +1,81 @@
+diff -cr bluez-4.99.pan.orig/attrib/att.c bluez-4.99.pan/attrib/att.c
+*** bluez-4.99.pan.orig/attrib/att.c	Wed Oct 17 08:36:23 2012
+--- bluez-4.99.pan/attrib/att.c	Wed Oct 17 08:38:07 2012
+***************
+*** 211,216 ****
+--- 211,218 ----
+  	elen = pdu[1];
+  	num = (len - 2) / elen;
+  	list = att_data_list_alloc(num, elen);
++ 	if (list == NULL)
++ 		return NULL;
+  
+  	ptr = &pdu[2];
+  
+***************
+*** 435,440 ****
+--- 437,444 ----
+  	elen = pdu[1];
+  	num = (len - 2) / elen;
+  	list = att_data_list_alloc(num, elen);
++ 	if (list == NULL)
++ 		return NULL;
+  
+  	ptr = &pdu[2];
+  
+***************
+*** 819,824 ****
+--- 823,830 ----
+  	ptr = (void *) &pdu[2];
+  
+  	list = att_data_list_alloc(num, elen);
++ 	if (list == NULL)
++ 		return NULL;
+  
+  	for (i = 0; i < num; i++) {
+  		memcpy(list->data[i], ptr, list->len);
+diff -cr bluez-4.99.pan.orig/src/attrib-server.c bluez-4.99.pan/src/attrib-server.c
+*** bluez-4.99.pan.orig/src/attrib-server.c	Tue Oct 16 19:20:41 2012
+--- bluez-4.99.pan/src/attrib-server.c	Wed Oct 17 08:43:42 2012
+***************
+*** 485,490 ****
+--- 485,495 ----
+  	length = g_slist_length(groups);
+  
+  	adl = att_data_list_alloc(length, last_size + 4);
++ 	if (adl == NULL) {
++ 		g_slist_free_full(groups, g_free);
++ 		return enc_error_resp(ATT_OP_READ_BY_GROUP_REQ, start,
++ 					ATT_ECODE_UNLIKELY, pdu, len);
++ 	}
+  
+  	for (i = 0, l = groups; l; l = l->next, i++) {
+  		uint8_t *value;
+***************
+*** 568,573 ****
+--- 573,583 ----
+  	length += 2;
+  
+  	adl = att_data_list_alloc(num, length);
++ 	if (adl == NULL) {
++ 		g_slist_free(types);
++ 		return enc_error_resp(ATT_OP_READ_BY_TYPE_REQ, start,
++ 					ATT_ECODE_UNLIKELY, pdu, len);
++ 	}
+  
+  	for (i = 0, l = types; l; i++, l = l->next) {
+  		uint8_t *value;
+***************
+*** 643,648 ****
+--- 653,663 ----
+  	}
+  
+  	adl = att_data_list_alloc(num, length + 2);
++ 	if (adl == NULL) {
++ 		g_slist_free(info);
++ 		return enc_error_resp(ATT_OP_FIND_INFO_REQ, start,
++ 					ATT_ECODE_UNLIKELY, pdu, len);
++ 	}
+  
+  	for (i = 0, l = info; l; i++, l = l->next) {
+  		uint8_t *value;

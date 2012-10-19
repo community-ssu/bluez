@@ -1,0 +1,1519 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	51df85874550ab87ff03d35a57c6903831d3e835
+	Wed, 5 Sep 2012 09:04:52 +0000 (12:04 +0300)
+
+lib: Add unaligned put helper functions
+
+These functions are similar to bt_get_* functions.
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	eb4ef469607a1ba579352032ad5d955a697de1c7
+	Wed, 5 Sep 2012 09:05:15 +0000 (12:05 +0300)
+
+sdp: Fix compilation errors due to unaligned memory access
+
+This fix number of build errors on ARM similar to one below.
+
+lib/sdp.c: In function 'sdp_set_seq_len':
+lib/sdp.c:625:3: error: cast increases required alignment of target
+ type [-Werror=cast-align]
+lib/sdp.c:625:3: error: cast increases required alignment of target
+type [-Werror=cast-align]
+lib/sdp.c:631:3: error: cast increases required alignment of target
+type [-Werror=cast-align]
+lib/sdp.c:631:3: error: cast increases required alignment of target
+type [-Werror=cast-align]
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	4ac4e80fd2cbe88f4972d70e1ea5d5cf3dfc6c5b
+	Wed, 5 Sep 2012 09:12:31 +0000 (12:12 +0300)
+
+sdp: Use bt_get_be* helpers instead of bt_get_unaligned
+
+This fix number of compilation errors on ARM similar to one below.
+
+lib/sdp.c: In function 'sdp_uuid_extract':
+lib/sdp.c:1019:27: error: cast increases required alignment
+    of target type [-Werror=cast-align]
+lib/sdp.c:1019:27: error: cast increases required alignment
+    of target type [-Werror=cast-align]
+lib/sdp.c:1026:27: error: cast increases required alignment
+    of target type [-Werror=cast-align]
+lib/sdp.c:1026:27: error: cast increases required alignment
+    of target type [-Werror=cast-align]
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	3b2112823ce123ed8b775889de52db586bb72b69
+	Wed, 5 Sep 2012 09:19:13 +0000 (12:19 +0300)
+
+sdpd-request: Fix build errors due to unaligned memory access
+
+This fix number of build errors on ARM similar to one below.
+
+CC src/bluetooth-sdpd-request.o
+src/sdpd-request.c: In function extra_des:
+src/sdpd-request.c:181:5: error: cast increases required alignment
+    of targettype [-Werror=cast-align]
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	809b7c317f5270b278d2cb29c69e056c815cad01
+	Wed, 5 Sep 2012 09:23:22 +0000 (12:23 +0300)
+
+sdpd-service: Fix build errors due to unaligned memory access
+
+This fix number of build errors on ARM similar to one below.
+
+CC src/bluetooth-sdpd-service.o
+src/sdpd-service.c: In function service_remove_req:
+src/sdpd-service.c:517:20: error: cast increases required alignment of
+target type [-Werror=cast-align]
+src/sdpd-service.c:517:20: error: cast increases required alignment of
+target type [-Werror=cast-align]
+src/sdpd-service.c:536:2: error: cast increases required alignment of
+target type [-Werror=cast-align]
+src/sdpd-service.c:536:2: error: cast increases required alignment of
+target type [-Werror=cast-align]
+cc1: all warnings being treated as errors
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	b3fa97f8e7ad03dd181abdfc586264b2219fc4b8
+	Wed, 5 Sep 2012 09:29:51 +0000 (12:29 +0300)
+
+hciemu: Fix build errors due to unaligned memory access
+
+This fix following build errors on ARM.
+
+CC test/hciemu.o
+test/hciemu.c: In function num_completed_pkts:
+test/hciemu.c:429:4: error: cast increases required alignment of target
+ type [-Werror=cast-align]
+test/hciemu.c:430:4: error: cast increases required alignment of target
+type [-Werror=cast-align]
+cc1: all warnings being treated as errors
+make[1]: *** [test/hciemu.o] Error 1
+make: *** [all] Error 2
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	149396765c0acead51ce798a5ca0a27b62174079
+	Wed, 5 Sep 2012 09:30:15 +0000 (12:30 +0300)
+
+avrcp: Fix compilation errors due to unaligned memory access
+
+This fix following build errors on ARM.
+
+CC audio/bluetoothd-avrcp.o
+audio/avrcp.c: In function avrcp_handle_get_element_attributes:
+audio/avrcp.c:667:25: error: cast increases required alignment of
+target type [-Werror=cast-align]
+audio/avrcp.c:690:20: error: cast increases required alignment of
+target type [-Werror=cast-align]
+cc1: all warnings being treated as errors
+make[1]: *** [audio/bluetoothd-avrcp.o] Error 1
+make: *** [all] Error 2
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	885b72f1e3a93a470d89eeb0dceb6ea18d7ad7e9
+	Wed, 5 Sep 2012 09:30:54 +0000 (12:30 +0300)
+
+eir: Use bt_get_* helper functions to access unaligned memory
+
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	229f63c3c8693d2c0fce39005a08e400d1cd0ba3
+	Wed, 5 Sep 2012 09:31:07 +0000 (12:31 +0300)
+
+mgmt: Use bt_get_* helper functions to access unaligned memory
+
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	37632a7f9b67c264f481bb1ce9522e5d8bf7343e
+	Wed, 26 Sep 2012 11:48:58 +0000 (14:48 +0300)
+
+mgmt: Fix parsing read_index_list response
+
+diff -cr bluez-4.99.pan.orig/lib/bluetooth.h bluez-4.99.pan/lib/bluetooth.h
+*** bluez-4.99.pan.orig/lib/bluetooth.h	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/lib/bluetooth.h	Wed Oct 17 14:21:25 2012
+***************
+*** 183,188 ****
+--- 183,219 ----
+  {
+  	return bswap_16(bt_get_unaligned((const uint16_t *) ptr));
+  }
++ 
++ static inline void bt_put_le64(uint64_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(val, (uint64_t *) ptr);
++ }
++ 
++ static inline void bt_put_be64(uint64_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(bswap_64(val), (uint64_t *) ptr);
++ }
++ 
++ static inline void bt_put_le32(uint32_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(val, (uint32_t *) ptr);
++ }
++ 
++ static inline void bt_put_be32(uint32_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(bswap_32(val), (uint32_t *) ptr);
++ }
++ 
++ static inline void bt_put_le16(uint16_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(val, (uint16_t *) ptr);
++ }
++ 
++ static inline void bt_put_be16(uint16_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(bswap_16(val), (uint16_t *) ptr);
++ }
++ 
+  #elif __BYTE_ORDER == __BIG_ENDIAN
+  static inline uint64_t bt_get_le64(const void *ptr)
+  {
+***************
+*** 213,218 ****
+--- 244,279 ----
+  {
+  	return bt_get_unaligned((const uint16_t *) ptr);
+  }
++ 
++ static inline void bt_put_le64(uint64_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(bswap_64(val), (uint64_t *) ptr);
++ }
++ 
++ static inline void bt_put_be64(uint64_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(val, (uint64_t *) ptr);
++ }
++ 
++ static inline void bt_put_le32(uint32_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(bswap_32(val), (uint32_t *) ptr);
++ }
++ 
++ static inline void bt_put_be32(uint32_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(val, (uint32_t *) ptr);
++ }
++ 
++ static inline void bt_put_le16(uint16_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(bswap_16(val), (uint16_t *) ptr);
++ }
++ 
++ static inline void bt_put_be16(uint16_t val, const void *ptr)
++ {
++ 	bt_put_unaligned(val, (uint16_t *) ptr);
++ }
+  #else
+  #error "Unknown byte order"
+  #endif
+diff -cr bluez-4.99.pan.orig/audio/avrcp.c bluez-4.99.pan/audio/avrcp.c
+*** bluez-4.99.pan.orig/audio/avrcp.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/avrcp.c	Tue Oct 16 19:09:01 2012
+***************
+*** 639,651 ****
+  						uint8_t transaction)
+  {
+  	uint16_t len = ntohs(pdu->params_len);
+! 	uint64_t *identifier = (uint64_t *) &pdu->params[0];
+  	uint16_t pos;
+  	uint8_t nattr;
+  	GList *attr_ids;
+  	uint16_t offset;
+  
+! 	if (len < 9 || *identifier != 0)
+  		goto err;
+  
+  	nattr = pdu->params[8];
+--- 639,651 ----
+  						uint8_t transaction)
+  {
+  	uint16_t len = ntohs(pdu->params_len);
+! 	uint64_t identifier = bt_get_le64(&pdu->params[0]);
+  	uint16_t pos;
+  	uint8_t nattr;
+  	GList *attr_ids;
+  	uint16_t offset;
+  
+! 	if (len < 9 || identifier != 0)
+  		goto err;
+  
+  	nattr = pdu->params[8];
+***************
+*** 662,671 ****
+  		len = g_list_length(attr_ids);
+  	} else {
+  		unsigned int i;
+! 		uint32_t *attr = (uint32_t *) &pdu->params[9];
+  
+! 		for (i = 0, len = 0, attr_ids = NULL; i < nattr; i++, attr++) {
+! 			uint32_t id = ntohl(bt_get_unaligned(attr));
+  
+  			/* Don't add invalid attributes */
+  			if (id == AVRCP_MEDIA_ATTRIBUTE_ILLEGAL ||
+--- 662,671 ----
+  		len = g_list_length(attr_ids);
+  	} else {
+  		unsigned int i;
+! 		for (i = 0, len = 0, attr_ids = NULL; i < nattr; i++) {
+! 			uint32_t id;
+  
+! 			id = bt_get_be32(&pdu->params[9] + (i * sizeof(id)));
+  
+  			/* Don't add invalid attributes */
+  			if (id == AVRCP_MEDIA_ATTRIBUTE_ILLEGAL ||
+diff -cr bluez-4.99.pan.orig/lib/sdp.c bluez-4.99.pan/lib/sdp.c
+*** bluez-4.99.pan.orig/lib/sdp.c	Tue Oct 16 18:13:01 2012
+--- bluez-4.99.pan/lib/sdp.c	Tue Oct 16 18:49:17 2012
+***************
+*** 624,636 ****
+  	case SDP_ALT16:
+  	case SDP_TEXT_STR16:
+  	case SDP_URL_STR16:
+! 		bt_put_unaligned(htons(length), (uint16_t *) ptr);
+  		break;
+  	case SDP_SEQ32:
+  	case SDP_ALT32:
+  	case SDP_TEXT_STR32:
+  	case SDP_URL_STR32:
+! 		bt_put_unaligned(htonl(length), (uint32_t *) ptr);
+  		break;
+  	}
+  }
+--- 624,636 ----
+  	case SDP_ALT16:
+  	case SDP_TEXT_STR16:
+  	case SDP_URL_STR16:
+! 		bt_put_be16(length, ptr);
+  		break;
+  	case SDP_SEQ32:
+  	case SDP_ALT32:
+  	case SDP_TEXT_STR32:
+  	case SDP_URL_STR32:
+! 		bt_put_be32(length, ptr);
+  		break;
+  	}
+  }
+***************
+*** 687,693 ****
+  	/* data type for attr */
+  	*p++ = SDP_UINT16;
+  	buf->data_size = sizeof(uint8_t);
+! 	bt_put_unaligned(htons(attr), (uint16_t *) p);
+  	buf->data_size += sizeof(uint16_t);
+  }
+  
+--- 687,693 ----
+  	/* data type for attr */
+  	*p++ = SDP_UINT16;
+  	buf->data_size = sizeof(uint8_t);
+! 	bt_put_be16(attr, p);
+  	buf->data_size += sizeof(uint16_t);
+  }
+  
+***************
+*** 1018,1031 ****
+  			SDPERR("Not enough room for 16-bit UUID");
+  			return -1;
+  		}
+! 		sdp_uuid16_create(uuid, ntohs(bt_get_unaligned((uint16_t *) p)));
+  		*scanned += sizeof(uint16_t);
+  	} else if (type == SDP_UUID32) {
+  		if (bufsize < (int) sizeof(uint32_t)) {
+  			SDPERR("Not enough room for 32-bit UUID");
+  			return -1;
+  		}
+! 		sdp_uuid32_create(uuid, ntohl(bt_get_unaligned((uint32_t *) p)));
+  		*scanned += sizeof(uint32_t);
+  	} else {
+  		if (bufsize < (int) sizeof(uint128_t)) {
+--- 1018,1031 ----
+  			SDPERR("Not enough room for 16-bit UUID");
+  			return -1;
+  		}
+! 		sdp_uuid16_create(uuid, bt_get_be16(p));
+  		*scanned += sizeof(uint16_t);
+  	} else if (type == SDP_UUID32) {
+  		if (bufsize < (int) sizeof(uint32_t)) {
+  			SDPERR("Not enough room for 32-bit UUID");
+  			return -1;
+  		}
+! 		sdp_uuid32_create(uuid, bt_get_be32(p));
+  		*scanned += sizeof(uint32_t);
+  	} else {
+  		if (bufsize < (int) sizeof(uint128_t)) {
+***************
+*** 1080,1086 ****
+  			return NULL;
+  		}
+  		*len += sizeof(uint16_t);
+! 		d->val.uint16 = ntohs(bt_get_unaligned((uint16_t *) p));
+  		break;
+  	case SDP_INT32:
+  	case SDP_UINT32:
+--- 1080,1086 ----
+  			return NULL;
+  		}
+  		*len += sizeof(uint16_t);
+! 		d->val.uint16 = bt_get_be16(p);
+  		break;
+  	case SDP_INT32:
+  	case SDP_UINT32:
+***************
+*** 1090,1096 ****
+  			return NULL;
+  		}
+  		*len += sizeof(uint32_t);
+! 		d->val.uint32 = ntohl(bt_get_unaligned((uint32_t *) p));
+  		break;
+  	case SDP_INT64:
+  	case SDP_UINT64:
+--- 1090,1096 ----
+  			return NULL;
+  		}
+  		*len += sizeof(uint32_t);
+! 		d->val.uint32 = bt_get_be32(p);
+  		break;
+  	case SDP_INT64:
+  	case SDP_UINT64:
+***************
+*** 1100,1106 ****
+  			return NULL;
+  		}
+  		*len += sizeof(uint64_t);
+! 		d->val.uint64 = ntoh64(bt_get_unaligned((uint64_t *) p));
+  		break;
+  	case SDP_INT128:
+  	case SDP_UINT128:
+--- 1100,1106 ----
+  			return NULL;
+  		}
+  		*len += sizeof(uint64_t);
+! 		d->val.uint64 = bt_get_be64(p);
+  		break;
+  	case SDP_INT128:
+  	case SDP_UINT128:
+***************
+*** 1183,1189 ****
+  			free(d);
+  			return NULL;
+  		}
+! 		n = ntohs(bt_get_unaligned((uint16_t *) p));
+  		p += sizeof(uint16_t);
+  		*len += sizeof(uint16_t) + n;
+  		bufsize -= sizeof(uint16_t);
+--- 1183,1189 ----
+  			free(d);
+  			return NULL;
+  		}
+! 		n = bt_get_be16(p);
+  		p += sizeof(uint16_t);
+  		*len += sizeof(uint16_t) + n;
+  		bufsize -= sizeof(uint16_t);
+***************
+*** 1253,1259 ****
+  			SDPERR("Unexpected end of packet");
+  			return 0;
+  		}
+! 		*size = ntohs(bt_get_unaligned((uint16_t *) buf));
+  		scanned += sizeof(uint16_t);
+  		break;
+  	case SDP_SEQ32:
+--- 1253,1259 ----
+  			SDPERR("Unexpected end of packet");
+  			return 0;
+  		}
+! 		*size = bt_get_be16(buf);
+  		scanned += sizeof(uint16_t);
+  		break;
+  	case SDP_SEQ32:
+***************
+*** 1262,1268 ****
+  			SDPERR("Unexpected end of packet");
+  			return 0;
+  		}
+! 		*size = ntohl(bt_get_unaligned((uint32_t *) buf));
+  		scanned += sizeof(uint32_t);
+  		break;
+  	default:
+--- 1262,1268 ----
+  			SDPERR("Unexpected end of packet");
+  			return 0;
+  		}
+! 		*size = bt_get_be32(buf);
+  		scanned += sizeof(uint32_t);
+  		break;
+  	default:
+***************
+*** 1429,1435 ****
+  		}
+  
+  		dtd = *(uint8_t *) p;
+! 		attr = ntohs(bt_get_unaligned((uint16_t *) (p + n)));
+  		n += sizeof(uint16_t);
+  
+  		SDPDBG("DTD of attrId : %d Attr id : 0x%x \n", dtd, attr);
+--- 1429,1435 ----
+  		}
+  
+  		dtd = *(uint8_t *) p;
+! 		attr = bt_get_be16(p + n);
+  		n += sizeof(uint16_t);
+  
+  		SDPDBG("DTD of attrId : %d Attr id : 0x%x \n", dtd, attr);
+***************
+*** 2794,2803 ****
+  		*(uint8_t *) p = dst->data_size - sizeof(uint8_t) - sizeof(uint8_t);
+  		break;
+  	case SDP_SEQ16:
+! 		bt_put_unaligned(htons(dst->data_size - sizeof(uint8_t) - sizeof(uint16_t)), (uint16_t *) p);
+  		break;
+  	case SDP_SEQ32:
+! 		bt_put_unaligned(htonl(dst->data_size - sizeof(uint8_t) - sizeof(uint32_t)), (uint32_t *) p);
+  		break;
+  	}
+  }
+--- 2794,2803 ----
+  		*(uint8_t *) p = dst->data_size - sizeof(uint8_t) - sizeof(uint8_t);
+  		break;
+  	case SDP_SEQ16:
+! 		bt_put_be16(dst->data_size - sizeof(uint8_t) - sizeof(uint16_t), p);
+  		break;
+  	case SDP_SEQ32:
+! 		bt_put_be32(dst->data_size - sizeof(uint8_t) - sizeof(uint32_t), p);
+  		break;
+  	}
+  }
+***************
+*** 2894,2900 ****
+  			goto end;
+  		}
+  		if (handle)
+! 			*handle  = ntohl(bt_get_unaligned((uint32_t *) p));
+  	}
+  
+  end:
+--- 2894,2900 ----
+  			goto end;
+  		}
+  		if (handle)
+! 			*handle  = bt_get_be32(p);
+  	}
+  
+  end:
+***************
+*** 2977,2983 ****
+  
+  	p = reqbuf + sizeof(sdp_pdu_hdr_t);
+  	reqsize = sizeof(sdp_pdu_hdr_t);
+! 	bt_put_unaligned(htonl(handle), (uint32_t *) p);
+  	reqsize += sizeof(uint32_t);
+  
+  	reqhdr->plen = htons(reqsize - sizeof(sdp_pdu_hdr_t));
+--- 2977,2983 ----
+  
+  	p = reqbuf + sizeof(sdp_pdu_hdr_t);
+  	reqsize = sizeof(sdp_pdu_hdr_t);
+! 	bt_put_be32(handle, p);
+  	reqsize += sizeof(uint32_t);
+  
+  	reqhdr->plen = htons(reqsize - sizeof(sdp_pdu_hdr_t));
+***************
+*** 3070,3076 ****
+  	p = reqbuf + sizeof(sdp_pdu_hdr_t);
+  	reqsize = sizeof(sdp_pdu_hdr_t);
+  
+! 	bt_put_unaligned(htonl(handle), (uint32_t *) p);
+  	reqsize += sizeof(uint32_t);
+  	p += sizeof(uint32_t);
+  
+--- 3070,3076 ----
+  	p = reqbuf + sizeof(sdp_pdu_hdr_t);
+  	reqsize = sizeof(sdp_pdu_hdr_t);
+  
+! 	bt_put_be32(handle, p);
+  	reqsize += sizeof(uint32_t);
+  	p += sizeof(uint32_t);
+  
+***************
+*** 3186,3192 ****
+  		pSvcRec = malloc(sizeof(uint32_t));
+  		if (!pSvcRec)
+  			break;
+! 		*pSvcRec = ntohl(bt_get_unaligned((uint32_t *) pdata));
+  		pSeq = sdp_list_append(pSeq, pSvcRec);
+  		pdata += sizeof(uint32_t);
+  		*scanned += sizeof(uint32_t);
+--- 3186,3192 ----
+  		pSvcRec = malloc(sizeof(uint32_t));
+  		if (!pSvcRec)
+  			break;
+! 		*pSvcRec = bt_get_be32(pdata);
+  		pSeq = sdp_list_append(pSeq, pSvcRec);
+  		pdata += sizeof(uint32_t);
+  		*scanned += sizeof(uint32_t);
+***************
+*** 3357,3363 ****
+  	pdata += seqlen;
+  
+  	/* specify the maximum svc rec count that client expects */
+! 	bt_put_unaligned(htons(max_rec_num), (uint16_t *) pdata);
+  	reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+--- 3357,3363 ----
+  	pdata += seqlen;
+  
+  	/* specify the maximum svc rec count that client expects */
+! 	bt_put_be16(max_rec_num, pdata);
+  	reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+***************
+*** 3410,3416 ****
+  		pdata += sizeof(uint16_t);
+  		scanned += sizeof(uint16_t);
+  		pdata_len -= sizeof(uint16_t);
+! 		rec_count = ntohs(bt_get_unaligned((uint16_t *) pdata));
+  		pdata += sizeof(uint16_t);
+  		scanned += sizeof(uint16_t);
+  		pdata_len -= sizeof(uint16_t);
+--- 3410,3416 ----
+  		pdata += sizeof(uint16_t);
+  		scanned += sizeof(uint16_t);
+  		pdata_len -= sizeof(uint16_t);
+! 		rec_count = bt_get_be16(pdata);
+  		pdata += sizeof(uint16_t);
+  		scanned += sizeof(uint16_t);
+  		pdata_len -= sizeof(uint16_t);
+***************
+*** 3519,3530 ****
+  	reqsize = sizeof(sdp_pdu_hdr_t);
+  
+  	/* add the service record handle */
+! 	bt_put_unaligned(htonl(handle), (uint32_t *) pdata);
+  	reqsize += sizeof(uint32_t);
+  	pdata += sizeof(uint32_t);
+  
+  	/* specify the response limit */
+! 	bt_put_unaligned(htons(65535), (uint16_t *) pdata);
+  	reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+--- 3519,3530 ----
+  	reqsize = sizeof(sdp_pdu_hdr_t);
+  
+  	/* add the service record handle */
+! 	bt_put_be32(handle, pdata);
+  	reqsize += sizeof(uint32_t);
+  	pdata += sizeof(uint32_t);
+  
+  	/* specify the response limit */
+! 	bt_put_be16(65535, pdata);
+  	reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+***************
+*** 3576,3582 ****
+  			goto end;
+  		}
+  
+! 		rsp_count = ntohs(bt_get_unaligned((uint16_t *) pdata));
+  		attr_list_len += rsp_count;
+  		pdata += sizeof(uint16_t);
+  		pdata_len -= sizeof(uint16_t);
+--- 3576,3582 ----
+  			goto end;
+  		}
+  
+! 		rsp_count = bt_get_be16(pdata);
+  		attr_list_len += rsp_count;
+  		pdata += sizeof(uint16_t);
+  		pdata_len -= sizeof(uint16_t);
+***************
+*** 3778,3784 ****
+  	t->reqsize += seqlen;
+  	pdata += seqlen;
+  
+! 	bt_put_unaligned(htons(max_rec_num), (uint16_t *) pdata);
+  	t->reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+--- 3778,3784 ----
+  	t->reqsize += seqlen;
+  	pdata += seqlen;
+  
+! 	bt_put_be16(max_rec_num, pdata);
+  	t->reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+***************
+*** 3871,3882 ****
+  	t->reqsize = sizeof(sdp_pdu_hdr_t);
+  
+  	/* add the service record handle */
+! 	bt_put_unaligned(htonl(handle), (uint32_t *) pdata);
+  	t->reqsize += sizeof(uint32_t);
+  	pdata += sizeof(uint32_t);
+  
+  	/* specify the response limit */
+! 	bt_put_unaligned(htons(65535), (uint16_t *) pdata);
+  	t->reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+--- 3871,3882 ----
+  	t->reqsize = sizeof(sdp_pdu_hdr_t);
+  
+  	/* add the service record handle */
+! 	bt_put_be32(handle, pdata);
+  	t->reqsize += sizeof(uint32_t);
+  	pdata += sizeof(uint32_t);
+  
+  	/* specify the response limit */
+! 	bt_put_be16(65535, pdata);
+  	t->reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+***************
+*** 3991,3997 ****
+  	t->reqsize += seqlen;
+  	pdata += seqlen;
+  
+! 	bt_put_unaligned(htons(SDP_MAX_ATTR_LEN), (uint16_t *) pdata);
+  	t->reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+--- 3991,3997 ----
+  	t->reqsize += seqlen;
+  	pdata += seqlen;
+  
+! 	bt_put_be16(SDP_MAX_ATTR_LEN, pdata);
+  	t->reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+***************
+*** 4127,4135 ****
+  		 * CSRC: Current Service Record Count (2 bytes)
+  		 */
+  		ssr_pdata = pdata;
+! 		tsrc = ntohs(bt_get_unaligned((uint16_t *) ssr_pdata));
+  		ssr_pdata += sizeof(uint16_t);
+! 		csrc = ntohs(bt_get_unaligned((uint16_t *) ssr_pdata));
+  
+  		/* csrc should never be larger than tsrc */
+  		if (csrc > tsrc) {
+--- 4127,4135 ----
+  		 * CSRC: Current Service Record Count (2 bytes)
+  		 */
+  		ssr_pdata = pdata;
+! 		tsrc = bt_get_be16(ssr_pdata);
+  		ssr_pdata += sizeof(uint16_t);
+! 		csrc = bt_get_be16(ssr_pdata);
+  
+  		/* csrc should never be larger than tsrc */
+  		if (csrc > tsrc) {
+***************
+*** 4165,4171 ****
+  		break;
+  	case SDP_SVC_ATTR_RSP:
+  	case SDP_SVC_SEARCH_ATTR_RSP:
+! 		rsp_count = ntohs(bt_get_unaligned((uint16_t *) pdata));
+  		SDPDBG("Attrlist byte count : %d\n", rsp_count);
+  
+  		/*
+--- 4165,4171 ----
+  		break;
+  	case SDP_SVC_ATTR_RSP:
+  	case SDP_SVC_SEARCH_ATTR_RSP:
+! 		rsp_count = bt_get_be16(pdata);
+  		SDPDBG("Attrlist byte count : %d\n", rsp_count);
+  
+  		/*
+***************
+*** 4178,4184 ****
+  		status = 0x0000;
+  		break;
+  	case SDP_ERROR_RSP:
+! 		status = ntohs(bt_get_unaligned((uint16_t *) pdata));
+  		size = ntohs(rsphdr->plen);
+  
+  		goto end;
+--- 4178,4184 ----
+  		status = 0x0000;
+  		break;
+  	case SDP_ERROR_RSP:
+! 		status = bt_get_be16(pdata);
+  		size = ntohs(rsphdr->plen);
+  
+  		goto end;
+***************
+*** 4339,4345 ****
+  	reqsize += seqlen;
+  	pdata += seqlen;
+  
+! 	bt_put_unaligned(htons(SDP_MAX_ATTR_LEN), (uint16_t *) pdata);
+  	reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+--- 4339,4345 ----
+  	reqsize += seqlen;
+  	pdata += seqlen;
+  
+! 	bt_put_be16(SDP_MAX_ATTR_LEN, pdata);
+  	reqsize += sizeof(uint16_t);
+  	pdata += sizeof(uint16_t);
+  
+***************
+*** 4398,4404 ****
+  			goto end;
+  		}
+  
+! 		rsp_count = ntohs(bt_get_unaligned((uint16_t *) pdata));
+  		attr_list_len += rsp_count;
+  		pdata += sizeof(uint16_t); /* pdata points to attribute list */
+  		pdata_len -= sizeof(uint16_t);
+--- 4398,4404 ----
+  			goto end;
+  		}
+  
+! 		rsp_count = bt_get_be16(pdata);
+  		attr_list_len += rsp_count;
+  		pdata += sizeof(uint16_t); /* pdata points to attribute list */
+  		pdata_len -= sizeof(uint16_t);
+diff -cr bluez-4.99.pan.orig/plugins/mgmtops.c bluez-4.99.pan/plugins/mgmtops.c
+*** bluez-4.99.pan.orig/plugins/mgmtops.c	Tue Oct 16 16:50:24 2012
+--- bluez-4.99.pan/plugins/mgmtops.c	Tue Oct 16 19:14:58 2012
+***************
+*** 98,104 ****
+  		abort();
+  	}
+  
+! 	mgmt_revision = btohs(bt_get_unaligned(&rp->revision));
+  	mgmt_version = rp->version;
+  
+  	DBG("version %u revision %u", mgmt_version, mgmt_revision);
+--- 98,104 ----
+  		abort();
+  	}
+  
+! 	mgmt_revision = bt_get_le16(&rp->revision);
+  	mgmt_version = rp->version;
+  
+  	DBG("version %u revision %u", mgmt_version, mgmt_revision);
+***************
+*** 943,949 ****
+  		return;
+  	}
+  
+! 	num = btohs(bt_get_unaligned(&rp->num_controllers));
+  
+  	if (num * sizeof(uint16_t) + sizeof(*rp) != len) {
+  		error("Incorrect packet size for index list event");
+--- 943,949 ----
+  		return;
+  	}
+  
+! 	num = bt_get_le16(&rp->num_controllers);
+  
+  	if (num * sizeof(uint16_t) + sizeof(*rp) != len) {
+  		error("Incorrect packet size for index list event");
+***************
+*** 953,959 ****
+  	for (i = 0; i < num; i++) {
+  		uint16_t index;
+  
+! 		index = btohs(bt_get_unaligned(&rp->index[i]));
+  
+  		add_controller(index);
+  		read_info(sk, index);
+--- 953,959 ----
+  	for (i = 0; i < num; i++) {
+  		uint16_t index;
+  
+! 		index = bt_get_le16(&rp->index[i]);
+  
+  		add_controller(index);
+  		read_info(sk, index);
+***************
+*** 1053,1059 ****
+  
+  	bacpy(&info->bdaddr, &rp->bdaddr);
+  	info->version = rp->version;
+! 	info->manufacturer = btohs(bt_get_unaligned(&rp->manufacturer));
+  
+  	memcpy(&info->supported_settings, &rp->supported_settings,
+  					sizeof(info->supported_settings));
+--- 1053,1059 ----
+  
+  	bacpy(&info->bdaddr, &rp->bdaddr);
+  	info->version = rp->version;
+! 	info->manufacturer = bt_get_le16(&rp->manufacturer);
+  
+  	memcpy(&info->supported_settings, &rp->supported_settings,
+  					sizeof(info->supported_settings));
+***************
+*** 1353,1359 ****
+  		return;
+  	}
+  
+! 	opcode = btohs(bt_get_unaligned(&ev->opcode));
+  
+  	len -= sizeof(*ev);
+  
+--- 1353,1359 ----
+  		return;
+  	}
+  
+! 	opcode = bt_get_le16(&ev->opcode);
+  
+  	len -= sizeof(*ev);
+  
+***************
+*** 1471,1477 ****
+  		return;
+  	}
+  
+! 	opcode = btohs(bt_get_unaligned(&ev->opcode));
+  
+  	if (!ev->status) {
+  		DBG("%s (0x%04x) cmd_status %u", mgmt_opstr(opcode), opcode,
+--- 1471,1477 ----
+  		return;
+  	}
+  
+! 	opcode = bt_get_le16(&ev->opcode);
+  
+  	if (!ev->status) {
+  		DBG("%s (0x%04x) cmd_status %u", mgmt_opstr(opcode), opcode,
+***************
+*** 1770,1778 ****
+  		return TRUE;
+  	}
+  
+! 	opcode = btohs(bt_get_unaligned(&hdr->opcode));
+! 	len = btohs(bt_get_unaligned(&hdr->len));
+! 	index = btohs(bt_get_unaligned(&hdr->index));
+  
+  	if (ret != MGMT_HDR_SIZE + len) {
+  		error("Packet length mismatch. ret %zd len %u", ret, len);
+--- 1770,1778 ----
+  		return TRUE;
+  	}
+  
+! 	opcode = bt_get_le16(&hdr->opcode);
+! 	len = bt_get_le16(&hdr->len);
+! 	index = bt_get_le16(&hdr->index);
+  
+  	if (ret != MGMT_HDR_SIZE + len) {
+  		error("Packet length mismatch. ret %zd len %u", ret, len);
+diff -cr bluez-4.99.pan.orig/src/eir.c bluez-4.99.pan/src/eir.c
+*** bluez-4.99.pan.orig/src/eir.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/eir.c	Tue Oct 16 19:09:58 2012
+***************
+*** 56,62 ****
+  
+  	service.type = SDP_UUID16;
+  	for (i = 0; i < len / 2; i++, uuid16++) {
+! 		service.value.uuid16 = btohs(bt_get_unaligned(uuid16));
+  		uuid_str = bt_uuid2string(&service);
+  		eir->services = g_slist_append(eir->services, uuid_str);
+  	}
+--- 56,62 ----
+  
+  	service.type = SDP_UUID16;
+  	for (i = 0; i < len / 2; i++, uuid16++) {
+! 		service.value.uuid16 = bt_get_le16(uuid16);
+  		uuid_str = bt_uuid2string(&service);
+  		eir->services = g_slist_append(eir->services, uuid_str);
+  	}
+***************
+*** 71,77 ****
+  
+  	service.type = SDP_UUID32;
+  	for (i = 0; i < len / 4; i++, uuid32++) {
+! 		service.value.uuid32 = btohl(bt_get_unaligned(uuid32));
+  		uuid_str = bt_uuid2string(&service);
+  		eir->services = g_slist_append(eir->services, uuid_str);
+  	}
+--- 71,77 ----
+  
+  	service.type = SDP_UUID32;
+  	for (i = 0; i < len / 4; i++, uuid32++) {
+! 		service.value.uuid32 = bt_get_le32(uuid32);
+  		uuid_str = bt_uuid2string(&service);
+  		eir->services = g_slist_append(eir->services, uuid_str);
+  	}
+diff -cr bluez-4.99.pan.orig/src/sdpd-request.c bluez-4.99.pan/src/sdpd-request.c
+*** bluez-4.99.pan.orig/src/sdpd-request.c	Mon Oct 15 08:20:19 2012
+--- bluez-4.99.pan/src/sdpd-request.c	Tue Oct 16 19:00:55 2012
+***************
+*** 139,144 ****
+--- 139,145 ----
+  	for (;;) {
+  		char *pElem = NULL;
+  		int localSeqLength = 0;
++ 		uuid_t *puuid;
+  
+  		if (bufsize < sizeof(uint8_t)) {
+  			SDPDBG("->Unexpected end of buffer");
+***************
+*** 178,188 ****
+  				struct attrid *aid;
+  				aid = malloc(sizeof(struct attrid));
+  				aid->dtd = dataType;
+! 				bt_put_unaligned(ntohs(bt_get_unaligned((uint16_t *)p)), (uint16_t *)&aid->uint16);
+  				pElem = (char *) aid;
+  			} else {
+  				pElem = malloc(sizeof(uint16_t));
+! 				bt_put_unaligned(ntohs(bt_get_unaligned((uint16_t *)p)), (uint16_t *)pElem);
+  			}
+  			p += sizeof(uint16_t);
+  			seqlen += sizeof(uint16_t);
+--- 179,189 ----
+  				struct attrid *aid;
+  				aid = malloc(sizeof(struct attrid));
+  				aid->dtd = dataType;
+! 				aid->uint16 = bt_get_be16(p);
+  				pElem = (char *) aid;
+  			} else {
+  				pElem = malloc(sizeof(uint16_t));
+! 				bt_put_be16(bt_get_unaligned((uint16_t *)p), pElem);
+  			}
+  			p += sizeof(uint16_t);
+  			seqlen += sizeof(uint16_t);
+***************
+*** 201,211 ****
+  				struct attrid *aid;
+  				aid = malloc(sizeof(struct attrid));
+  				aid->dtd = dataType;
+! 				bt_put_unaligned(ntohl(bt_get_unaligned((uint32_t *)p)), (uint32_t *)&aid->uint32);
+  				pElem = (char *) aid;
+  			} else {
+  				pElem = malloc(sizeof(uint32_t));
+! 				bt_put_unaligned(ntohl(bt_get_unaligned((uint32_t *)p)), (uint32_t *)pElem);
+  			}
+  			p += sizeof(uint32_t);
+  			seqlen += sizeof(uint32_t);
+--- 202,212 ----
+  				struct attrid *aid;
+  				aid = malloc(sizeof(struct attrid));
+  				aid->dtd = dataType;
+! 				aid->uint32 = bt_get_be32(p);
+  				pElem = (char *) aid;
+  			} else {
+  				pElem = malloc(sizeof(uint32_t));
+! 				bt_put_be32(bt_get_unaligned((uint32_t *)p), pElem);
+  			}
+  			p += sizeof(uint32_t);
+  			seqlen += sizeof(uint32_t);
+***************
+*** 214,225 ****
+  		case SDP_UUID16:
+  		case SDP_UUID32:
+  		case SDP_UUID128:
+! 			pElem = malloc(sizeof(uuid_t));
+! 			status = sdp_uuid_extract(p, bufsize, (uuid_t *) pElem, &localSeqLength);
+  			if (status < 0) {
+! 				free(pElem);
+  				goto failed;
+  			}
+  			seqlen += localSeqLength;
+  			p += localSeqLength;
+  			bufsize -= localSeqLength;
+--- 215,228 ----
+  		case SDP_UUID16:
+  		case SDP_UUID32:
+  		case SDP_UUID128:
+! 			puuid = malloc(sizeof(uuid_t));
+! 			status = sdp_uuid_extract(p, bufsize, puuid, &localSeqLength);
+  			if (status < 0) {
+! 				free(puuid);
+  				goto failed;
+  			}
++ 
++ 			pElem = (char *) puuid;
+  			seqlen += localSeqLength;
+  			p += localSeqLength;
+  			bufsize -= localSeqLength;
+***************
+*** 359,365 ****
+  	uint8_t *pCacheBuffer = NULL;
+  	int handleSize = 0;
+  	uint32_t cStateId = 0;
+! 	short *pTotalRecordCount, *pCurrentRecordCount;
+  	uint8_t *pdata = req->buf + sizeof(sdp_pdu_hdr_t);
+  	size_t data_left = req->len - sizeof(sdp_pdu_hdr_t);
+  
+--- 362,368 ----
+  	uint8_t *pCacheBuffer = NULL;
+  	int handleSize = 0;
+  	uint32_t cStateId = 0;
+! 	uint8_t *pTotalRecordCount, *pCurrentRecordCount;
+  	uint8_t *pdata = req->buf + sizeof(sdp_pdu_hdr_t);
+  	size_t data_left = req->len - sizeof(sdp_pdu_hdr_t);
+  
+***************
+*** 385,391 ****
+  		goto done;
+  	}
+  
+! 	expected = ntohs(bt_get_unaligned((uint16_t *)pdata));
+  
+  	SDPDBG("Expected count: %d", expected);
+  	SDPDBG("Bytes scanned : %d", scanned);
+--- 388,394 ----
+  		goto done;
+  	}
+  
+! 	expected = bt_get_be16(pdata);
+  
+  	SDPDBG("Expected count: %d", expected);
+  	SDPDBG("Bytes scanned : %d", scanned);
+***************
+*** 409,422 ****
+  	pdata = buf->data;
+  
+  	/* total service record count = 0 */
+! 	pTotalRecordCount = (short *)pdata;
+! 	bt_put_unaligned(0, (uint16_t *)pdata);
+  	pdata += sizeof(uint16_t);
+  	buf->data_size += sizeof(uint16_t);
+  
+  	/* current service record count = 0 */
+! 	pCurrentRecordCount = (short *)pdata;
+! 	bt_put_unaligned(0, (uint16_t *)pdata);
+  	pdata += sizeof(uint16_t);
+  	buf->data_size += sizeof(uint16_t);
+  
+--- 412,425 ----
+  	pdata = buf->data;
+  
+  	/* total service record count = 0 */
+! 	pTotalRecordCount = pdata;
+! 	bt_put_be16(0, pdata);
+  	pdata += sizeof(uint16_t);
+  	buf->data_size += sizeof(uint16_t);
+  
+  	/* current service record count = 0 */
+! 	pCurrentRecordCount = pdata;
+! 	bt_put_be16(0, pdata);
+  	pdata += sizeof(uint16_t);
+  	buf->data_size += sizeof(uint16_t);
+  
+***************
+*** 433,439 ****
+  			if (sdp_match_uuid(pattern, rec->pattern) > 0 &&
+  					sdp_check_access(rec->handle, &req->device)) {
+  				rsp_count++;
+! 				bt_put_unaligned(htonl(rec->handle), (uint32_t *)pdata);
+  				pdata += sizeof(uint32_t);
+  				handleSize += sizeof(uint32_t);
+  			}
+--- 436,442 ----
+  			if (sdp_match_uuid(pattern, rec->pattern) > 0 &&
+  					sdp_check_access(rec->handle, &req->device)) {
+  				rsp_count++;
+! 				bt_put_be32(rec->handle, pdata);
+  				pdata += sizeof(uint32_t);
+  				handleSize += sizeof(uint32_t);
+  			}
+***************
+*** 442,449 ****
+  		SDPDBG("Match count: %d", rsp_count);
+  
+  		buf->data_size += handleSize;
+! 		bt_put_unaligned(htons(rsp_count), (uint16_t *)pTotalRecordCount);
+! 		bt_put_unaligned(htons(rsp_count), (uint16_t *)pCurrentRecordCount);
+  
+  		if (rsp_count > actual) {
+  			/* cache the rsp and generate a continuation state */
+--- 445,452 ----
+  		SDPDBG("Match count: %d", rsp_count);
+  
+  		buf->data_size += handleSize;
+! 		bt_put_be16(rsp_count, pTotalRecordCount);
+! 		bt_put_be16(rsp_count, pCurrentRecordCount);
+  
+  		if (rsp_count > actual) {
+  			/* cache the rsp and generate a continuation state */
+***************
+*** 472,478 ****
+  			if (pCache) {
+  				pCacheBuffer = pCache->data;
+  				/* get the rsp_count from the cached buffer */
+! 				rsp_count = ntohs(bt_get_unaligned((uint16_t *)pCacheBuffer));
+  
+  				/* get index of the last sdp_record_t sent */
+  				lastIndex = cstate->cStateValue.lastIndexSent;
+--- 475,481 ----
+  			if (pCache) {
+  				pCacheBuffer = pCache->data;
+  				/* get the rsp_count from the cached buffer */
+! 				rsp_count = bt_get_be16(pCacheBuffer);
+  
+  				/* get index of the last sdp_record_t sent */
+  				lastIndex = cstate->cStateValue.lastIndexSent;
+***************
+*** 490,496 ****
+  		 * current record count and increment the cached
+  		 * buffer pointer to beyond the counters
+  		 */
+! 		pdata = (uint8_t *) pCurrentRecordCount + sizeof(uint16_t);
+  
+  		/* increment beyond the totalCount and the currentCount */
+  		pCacheBuffer += 2 * sizeof(uint16_t);
+--- 493,499 ----
+  		 * current record count and increment the cached
+  		 * buffer pointer to beyond the counters
+  		 */
+! 		pdata = pCurrentRecordCount + sizeof(uint16_t);
+  
+  		/* increment beyond the totalCount and the currentCount */
+  		pCacheBuffer += 2 * sizeof(uint16_t);
+***************
+*** 498,504 ****
+  		if (cstate) {
+  			handleSize = 0;
+  			for (i = lastIndex; (i - lastIndex) < actual && i < rsp_count; i++) {
+! 				bt_put_unaligned(bt_get_unaligned((uint32_t *)(pCacheBuffer + i * sizeof(uint32_t))), (uint32_t *)pdata);
+  				pdata += sizeof(uint32_t);
+  				handleSize += sizeof(uint32_t);
+  			}
+--- 501,507 ----
+  		if (cstate) {
+  			handleSize = 0;
+  			for (i = lastIndex; (i - lastIndex) < actual && i < rsp_count; i++) {
+! 				memcpy(pdata, pCacheBuffer + i * sizeof(uint32_t), sizeof(uint32_t));
+  				pdata += sizeof(uint32_t);
+  				handleSize += sizeof(uint32_t);
+  			}
+***************
+*** 508,515 ****
+  		}
+  
+  		buf->data_size += handleSize;
+! 		bt_put_unaligned(htons(rsp_count), (uint16_t *)pTotalRecordCount);
+! 		bt_put_unaligned(htons(i - lastIndex), (uint16_t *)pCurrentRecordCount);
+  
+  		if (i == rsp_count) {
+  			/* set "null" continuationState */
+--- 511,518 ----
+  		}
+  
+  		buf->data_size += handleSize;
+! 		bt_put_be16(rsp_count, pTotalRecordCount);
+! 		bt_put_be16(i - lastIndex, pCurrentRecordCount);
+  
+  		if (i == rsp_count) {
+  			/* set "null" continuationState */
+***************
+*** 571,582 ****
+  		SDPDBG("AttrDataType : %d", aid->dtd);
+  
+  		if (aid->dtd == SDP_UINT16) {
+! 			uint16_t attr = bt_get_unaligned((uint16_t *)&aid->uint16);
+  			sdp_data_t *a = sdp_data_get(rec, attr);
+  			if (a)
+  				sdp_append_to_pdu(buf, a);
+  		} else if (aid->dtd == SDP_UINT32) {
+! 			uint32_t range = bt_get_unaligned((uint32_t *)&aid->uint32);
+  			uint16_t attr;
+  			uint16_t low = (0xffff0000 & range) >> 16;
+  			uint16_t high = 0x0000ffff & range;
+--- 574,585 ----
+  		SDPDBG("AttrDataType : %d", aid->dtd);
+  
+  		if (aid->dtd == SDP_UINT16) {
+! 			uint16_t attr = aid->uint16;
+  			sdp_data_t *a = sdp_data_get(rec, attr);
+  			if (a)
+  				sdp_append_to_pdu(buf, a);
+  		} else if (aid->dtd == SDP_UINT32) {
+! 			uint32_t range = aid->uint32;
+  			uint16_t attr;
+  			uint16_t low = (0xffff0000 & range) >> 16;
+  			uint16_t high = 0x0000ffff & range;
+***************
+*** 639,645 ****
+  		goto done;
+  	}
+  
+! 	handle = ntohl(bt_get_unaligned((uint32_t *)pdata));
+  
+  	pdata += sizeof(uint32_t);
+  	data_left -= sizeof(uint32_t);
+--- 642,648 ----
+  		goto done;
+  	}
+  
+! 	handle = bt_get_be32(pdata);
+  
+  	pdata += sizeof(uint32_t);
+  	data_left -= sizeof(uint32_t);
+***************
+*** 649,655 ****
+  		goto done;
+  	}
+  
+! 	max_rsp_size = ntohs(bt_get_unaligned((uint16_t *)pdata));
+  
+  	pdata += sizeof(uint16_t);
+  	data_left -= sizeof(uint16_t);
+--- 652,658 ----
+  		goto done;
+  	}
+  
+! 	max_rsp_size = bt_get_be16(pdata);
+  
+  	pdata += sizeof(uint16_t);
+  	data_left -= sizeof(uint16_t);
+***************
+*** 765,771 ****
+  		return status;
+  
+  	/* set attribute list byte count */
+! 	bt_put_unaligned(htons(buf->data_size - cstate_size), (uint16_t *)buf->data);
+  	buf->data_size += sizeof(uint16_t);
+  	return 0;
+  }
+--- 768,774 ----
+  		return status;
+  
+  	/* set attribute list byte count */
+! 	bt_put_be16(buf->data_size - cstate_size, buf->data);
+  	buf->data_size += sizeof(uint16_t);
+  	return 0;
+  }
+***************
+*** 806,812 ****
+  		goto done;
+  	}
+  
+! 	max = ntohs(bt_get_unaligned((uint16_t *)pdata));
+  
+  	pdata += sizeof(uint16_t);
+  	data_left -= sizeof(uint16_t);
+--- 809,815 ----
+  		goto done;
+  	}
+  
+! 	max = bt_get_be16(pdata);
+  
+  	pdata += sizeof(uint16_t);
+  	data_left -= sizeof(uint16_t);
+***************
+*** 936,942 ****
+  
+  	if (!status) {
+  		/* set attribute list byte count */
+! 		bt_put_unaligned(htons(buf->data_size - cstate_size), (uint16_t *)buf->data);
+  		buf->data_size += sizeof(uint16_t);
+  	}
+  
+--- 939,945 ----
+  
+  	if (!status) {
+  		/* set attribute list byte count */
+! 		bt_put_be16(buf->data_size - cstate_size, buf->data);
+  		buf->data_size += sizeof(uint16_t);
+  	}
+  
+***************
+*** 1020,1026 ****
+  send_rsp:
+  	if (status) {
+  		rsphdr->pdu_id = SDP_ERROR_RSP;
+! 		bt_put_unaligned(htons(status), (uint16_t *)rsp.data);
+  		rsp.data_size = sizeof(uint16_t);
+  	}
+  
+--- 1023,1029 ----
+  send_rsp:
+  	if (status) {
+  		rsphdr->pdu_id = SDP_ERROR_RSP;
+! 		bt_put_be16(status, rsp.data);
+  		rsp.data_size = sizeof(uint16_t);
+  	}
+  
+diff -cr bluez-4.99.pan.orig/src/sdpd-service.c bluez-4.99.pan/src/sdpd-service.c
+*** bluez-4.99.pan.orig/src/sdpd-service.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/sdpd-service.c	Tue Oct 16 19:05:09 2012
+***************
+*** 316,322 ****
+  		return NULL;
+  	}
+  
+! 	lookAheadAttrId = ntohs(bt_get_unaligned((uint16_t *) (p + sizeof(uint8_t))));
+  
+  	SDPDBG("Look ahead attr id : %d", lookAheadAttrId);
+  
+--- 316,322 ----
+  		return NULL;
+  	}
+  
+! 	lookAheadAttrId = bt_get_be16(p + sizeof(uint8_t));
+  
+  	SDPDBG("Look ahead attr id : %d", lookAheadAttrId);
+  
+***************
+*** 326,334 ****
+  			SDPDBG("Unexpected end of packet");
+  			return NULL;
+  		}
+! 		handle = ntohl(bt_get_unaligned((uint32_t *) (p +
+! 				sizeof(uint8_t) + sizeof(uint16_t) +
+! 				sizeof(uint8_t))));
+  		SDPDBG("SvcRecHandle : 0x%x", handle);
+  		rec = sdp_record_find(handle);
+  	} else if (handleExpected != 0xffffffff)
+--- 326,333 ----
+  			SDPDBG("Unexpected end of packet");
+  			return NULL;
+  		}
+! 		handle = bt_get_be32(p + sizeof(uint8_t) + sizeof(uint16_t) +
+! 							sizeof(uint8_t));
+  		SDPDBG("SvcRecHandle : 0x%x", handle);
+  		rec = sdp_record_find(handle);
+  	} else if (handleExpected != 0xffffffff)
+***************
+*** 362,368 ****
+  							seqlen, localExtractedLength);
+  		dtd = *(uint8_t *) p;
+  
+! 		attrId = ntohs(bt_get_unaligned((uint16_t *) (p + attrSize)));
+  		attrSize += sizeof(uint16_t);
+  
+  		SDPDBG("DTD of attrId : %d Attr id : 0x%x", dtd, attrId);
+--- 361,367 ----
+  							seqlen, localExtractedLength);
+  		dtd = *(uint8_t *) p;
+  
+! 		attrId = bt_get_be16(p + attrSize);
+  		attrSize += sizeof(uint16_t);
+  
+  		SDPDBG("DTD of attrId : %d Attr id : 0x%x", dtd, attrId);
+***************
+*** 453,465 ****
+  	update_db_timestamp();
+  
+  	/* Build a rsp buffer */
+! 	bt_put_unaligned(htonl(rec->handle), (uint32_t *) rsp->data);
+  	rsp->data_size = sizeof(uint32_t);
+  
+  	return 0;
+  
+  invalid:
+! 	bt_put_unaligned(htons(SDP_INVALID_SYNTAX), (uint16_t *) rsp->data);
+  	rsp->data_size = sizeof(uint16_t);
+  
+  	return -1;
+--- 452,464 ----
+  	update_db_timestamp();
+  
+  	/* Build a rsp buffer */
+! 	bt_put_be32(rec->handle, rsp->data);
+  	rsp->data_size = sizeof(uint32_t);
+  
+  	return 0;
+  
+  invalid:
+! 	bt_put_be16(SDP_INVALID_SYNTAX, rsp->data);
+  	rsp->data_size = sizeof(uint16_t);
+  
+  	return -1;
+***************
+*** 474,480 ****
+  	int status = 0, scanned = 0;
+  	uint8_t *p = req->buf + sizeof(sdp_pdu_hdr_t);
+  	int bufsize = req->len - sizeof(sdp_pdu_hdr_t);
+! 	uint32_t handle = ntohl(bt_get_unaligned((uint32_t *) p));
+  
+  	SDPDBG("Svc Rec Handle: 0x%x", handle);
+  
+--- 473,479 ----
+  	int status = 0, scanned = 0;
+  	uint8_t *p = req->buf + sizeof(sdp_pdu_hdr_t);
+  	int bufsize = req->len - sizeof(sdp_pdu_hdr_t);
+! 	uint32_t handle = bt_get_be32(p);
+  
+  	SDPDBG("Svc Rec Handle: 0x%x", handle);
+  
+***************
+*** 502,508 ****
+  
+  done:
+  	p = rsp->data;
+! 	bt_put_unaligned(htons(status), (uint16_t *) p);
+  	rsp->data_size = sizeof(uint16_t);
+  	return status;
+  }
+--- 501,507 ----
+  
+  done:
+  	p = rsp->data;
+! 	bt_put_be16(status, p);
+  	rsp->data_size = sizeof(uint16_t);
+  	return status;
+  }
+***************
+*** 513,519 ****
+  int service_remove_req(sdp_req_t *req, sdp_buf_t *rsp)
+  {
+  	uint8_t *p = req->buf + sizeof(sdp_pdu_hdr_t);
+! 	uint32_t handle = ntohl(bt_get_unaligned((uint32_t *) p));
+  	sdp_record_t *rec;
+  	int status = 0;
+  
+--- 512,518 ----
+  int service_remove_req(sdp_req_t *req, sdp_buf_t *rsp)
+  {
+  	uint8_t *p = req->buf + sizeof(sdp_pdu_hdr_t);
+! 	uint32_t handle = bt_get_be32(p);
+  	sdp_record_t *rec;
+  	int status = 0;
+  
+***************
+*** 532,538 ****
+  	}
+  
+  	p = rsp->data;
+! 	bt_put_unaligned(htons(status), (uint16_t *) p);
+  	rsp->data_size = sizeof(uint16_t);
+  
+  	return status;
+--- 531,537 ----
+  	}
+  
+  	p = rsp->data;
+! 	bt_put_be16(status, p);
+  	rsp->data_size = sizeof(uint16_t);
+  
+  	return status;
+diff -cr bluez-4.99.pan.orig/test/hciemu.c bluez-4.99.pan/test/hciemu.c
+*** bluez-4.99.pan.orig/test/hciemu.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/test/hciemu.c	Tue Oct 16 19:06:13 2012
+***************
+*** 426,433 ****
+  	np = (void *) ptr; ptr += EVT_NUM_COMP_PKTS_SIZE;
+  	np->num_hndl = 1;
+  
+! 	*((uint16_t *) ptr) = htobs(conn->handle); ptr += 2;
+! 	*((uint16_t *) ptr) = htobs(vdev.acl_cnt); ptr += 2;
+  
+  	write_snoop(vdev.dd, HCI_EVENT_PKT, 1, buf, ptr - buf);
+  
+--- 426,435 ----
+  	np = (void *) ptr; ptr += EVT_NUM_COMP_PKTS_SIZE;
+  	np->num_hndl = 1;
+  
+! 	bt_put_le16(conn->handle, ptr);
+! 	ptr += 2;
+! 	bt_put_le16(vdev.acl_cnt, ptr);
+! 	ptr += 2;
+  
+  	write_snoop(vdev.dd, HCI_EVENT_PKT, 1, buf, ptr - buf);
+  

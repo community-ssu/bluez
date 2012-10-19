@@ -1,0 +1,31 @@
+author	Par-Gunnar Hjalmdahl <par-gunnar.hjalmdahl@stericsson.com>
+commit	06a7852b69eda34ad5da609897c46191cffc4973
+	Tue, 11 Sep 2012 08:20:36 +0000 (11:20 +0300)
+
+avctp: Fix reply for message with invalid PID
+
+Reply for control message with invalid (not registered for reception
+of messages) PID should not have message information field present.
+
+This was affecting AVCTP qualification test case TP/NFR/BI-01-C.
+
+diff -cr bluez-4.99.pan.orig/audio/avctp.c bluez-4.99.pan/audio/avctp.c
+*** bluez-4.99.pan.orig/audio/avctp.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/avctp.c	Tue Oct 16 19:24:12 2012
+***************
+*** 462,468 ****
+  
+  	if (avctp->pid != htons(AV_REMOTE_SVCLASS_ID)) {
+  		avctp->ipid = 1;
+! 		avc->code = AVC_CTYPE_REJECTED;
+  		goto done;
+  	}
+  
+--- 462,468 ----
+  
+  	if (avctp->pid != htons(AV_REMOTE_SVCLASS_ID)) {
+  		avctp->ipid = 1;
+! 		avc->code = AVCTP_HEADER_LENGTH;
+  		goto done;
+  	}
+  

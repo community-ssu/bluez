@@ -1,0 +1,38 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	44e59c8d9fb2ec8eb107ee3d9d73f2a76b4df429
+	Thu, 24 May 2012 08:07:15 +0000 (11:07 +0300)
+
+avctp: Fix NULL check after dereference
+
+Check for session != NULL has to be done before accessing session.
+
+diff -cr bluez-4.99.pan.orig/audio/avctp.c bluez-4.99.pan/audio/avctp.c
+*** bluez-4.99.pan.orig/audio/avctp.c	Mon Oct 15 03:28:15 2012
+--- bluez-4.99.pan/audio/avctp.c	Mon Oct 15 08:44:22 2012
+***************
+*** 311,321 ****
+  
+  static void avctp_disconnected(struct avctp *session)
+  {
+! 	struct avctp_server *server = session->server;
+  
+  	if (!session)
+  		return;
+  
+  	if (session->io) {
+  		g_io_channel_shutdown(session->io, TRUE, NULL);
+  		g_io_channel_unref(session->io);
+--- 311,323 ----
+  
+  static void avctp_disconnected(struct avctp *session)
+  {
+! 	struct avctp_server *server;
+  
+  	if (!session)
+  		return;
+  
++ 	server = session->server;
++ 
+  	if (session->io) {
+  		g_io_channel_shutdown(session->io, TRUE, NULL);
+  		g_io_channel_unref(session->io);

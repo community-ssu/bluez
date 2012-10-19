@@ -1,0 +1,30 @@
+author	Michal Labedzki <michal.labedzki@tieto.com>
+commit	e8e323e1fbd097672ad37580019055ec1ed752b3
+	Tue, 13 Mar 2012 11:49:49 +0000 (13:49 +0200)
+
+avrcp: Fix response ctype of AbortContinuingResponse
+
+Request ctype of "AbortContinuingResponse" is CONTROL, so response
+should be ACCEPTED instead of STABLE. This affect PTS Test Case for
+TP/RCR/BV-04-C.
+
+diff -cr bluez-4.99.pan.orig/audio/avrcp.c bluez-4.99.pan/audio/avrcp.c
+*** bluez-4.99.pan.orig/audio/avrcp.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/audio/avrcp.c	Fri Oct 12 07:32:26 2012
+***************
+*** 986,992 ****
+  	player_abort_pending_pdu(player);
+  	pdu->params_len = 0;
+  
+! 	return AVC_CTYPE_STABLE;
+  
+  err:
+  	pdu->params_len = htons(1);
+--- 986,992 ----
+  	player_abort_pending_pdu(player);
+  	pdu->params_len = 0;
+  
+! 	return AVC_CTYPE_ACCEPTED;
+  
+  err:
+  	pdu->params_len = htons(1);

@@ -1,0 +1,31 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	19127fd42ddf19d9eb4335ce0ff10f25c920ebee
+	Wed, 26 Sep 2012 17:12:07 +0000 (20:12 +0300)
+
+AVRCP: Fix handler lookup for undefined control PDU ids
+
+The lookup table of handlers is not NULL terminated which in case of an
+undefined id may lead to read invalid memory out of the table area.
+
+To fix this the id 0x00 is now used as delimiter.
+
+diff -cr bluez-4.99.pan.orig/audio/avrcp.c bluez-4.99.pan/audio/avrcp.c
+*** bluez-4.99.pan.orig/audio/avrcp.c	Tue Oct 16 19:21:05 2012
+--- bluez-4.99.pan/audio/avrcp.c	Wed Oct 17 06:30:03 2012
+***************
+*** 1061,1067 ****
+  		goto err_metadata;
+  	}
+  
+! 	for (handler = handlers; handler; handler++) {
+  		if (handler->pdu_id == pdu->pdu_id)
+  			break;
+  	}
+--- 1061,1067 ----
+  		goto err_metadata;
+  	}
+  
+! 	for (handler = handlers; handler->pdu_id; handler++) {
+  		if (handler->pdu_id == pdu->pdu_id)
+  			break;
+  	}

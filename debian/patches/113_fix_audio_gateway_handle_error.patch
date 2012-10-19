@@ -1,0 +1,34 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	1ab43f63d4fe9994cde8901f4614a18255de85f2
+	Tue, 4 Sep 2012 12:50:55 +0000 (15:50 +0300)
+
+audio: Handle error in gateway_request_stream()
+
+gateway_request_stream() should check if the call to get_records() has
+succeeded, and fail otherwise.
+
+diff -cr bluez-4.99.pan.orig/audio/gateway.c bluez-4.99.pan/audio/gateway.c
+*** bluez-4.99.pan.orig/audio/gateway.c	Tue Oct 16 18:22:41 2012
+--- bluez-4.99.pan/audio/gateway.c	Tue Oct 16 18:24:14 2012
+***************
+*** 849,857 ****
+  	GError *err = NULL;
+  	GIOChannel *io;
+  
+! 	if (!gw->rfcomm)
+! 		get_records(dev);
+! 	else if (!gw->sco) {
+  		io = bt_io_connect(BT_IO_SCO, sco_connect_cb, dev, NULL, &err,
+  				BT_IO_OPT_SOURCE_BDADDR, &dev->src,
+  				BT_IO_OPT_DEST_BDADDR, &dev->dst,
+--- 849,858 ----
+  	GError *err = NULL;
+  	GIOChannel *io;
+  
+! 	if (!gw->rfcomm) {
+! 		if (get_records(dev) < 0)
+! 			return 0;
+! 	} else if (!gw->sco) {
+  		io = bt_io_connect(BT_IO_SCO, sco_connect_cb, dev, NULL, &err,
+  				BT_IO_OPT_SOURCE_BDADDR, &dev->src,
+  				BT_IO_OPT_DEST_BDADDR, &dev->dst,

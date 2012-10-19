@@ -1,0 +1,46 @@
+author	Lucas De Marchi <lucas.de.marchi@gmail.com>
+commit	99fe325ad2b0a8f3247e522820f9aa4c7e9663b0
+	Wed, 16 May 2012 08:18:28 +0000 (11:18 +0300)
+
+build: Fix typo in AM_CFLAGS
+
+diff -cr bluez-4.99.pan.orig/Makefile.am bluez-4.99.pan/Makefile.am
+*** bluez-4.99.pan.orig/Makefile.am	Thu Oct  4 05:51:55 2012
+--- bluez-4.99.pan/Makefile.am	Mon Oct 15 07:40:19 2012
+***************
+*** 359,365 ****
+  audio_libasound_module_ctl_bluetooth_la_LDFLAGS = -module -avoid-version #-export-symbols-regex [_]*snd_ctl_.*
+  audio_libasound_module_ctl_bluetooth_la_LIBADD = \
+  					lib/libbluetooth-private.la @ALSA_LIBS@
+! audio_libasound_module_ctl_bluetooth_la_CFLAGS = $(AM_CLAGS) @ALSA_CFLAGS@
+  
+  if DATAFILES
+  alsaconfdir = $(datadir)/alsa
+--- 359,365 ----
+  audio_libasound_module_ctl_bluetooth_la_LDFLAGS = -module -avoid-version #-export-symbols-regex [_]*snd_ctl_.*
+  audio_libasound_module_ctl_bluetooth_la_LIBADD = \
+  					lib/libbluetooth-private.la @ALSA_LIBS@
+! audio_libasound_module_ctl_bluetooth_la_CFLAGS = $(AM_CFLAGS) @ALSA_CFLAGS@
+  
+  if DATAFILES
+  alsaconfdir = $(datadir)/alsa
+diff -cr bluez-4.99.pan.orig/Makefile.in bluez-4.99.pan/Makefile.in
+*** bluez-4.99.pan.orig/Makefile.in	Sat Jul 14 19:25:20 2012
+--- bluez-4.99.pan/Makefile.in	Mon Oct 15 07:40:42 2012
+***************
+*** 1263,1269 ****
+  @ALSA_TRUE@audio_libasound_module_ctl_bluetooth_la_LIBADD = \
+  @ALSA_TRUE@					lib/libbluetooth-private.la @ALSA_LIBS@
+  
+! @ALSA_TRUE@audio_libasound_module_ctl_bluetooth_la_CFLAGS = $(AM_CLAGS) @ALSA_CFLAGS@
+  @ALSA_TRUE@@DATAFILES_TRUE@alsaconfdir = $(datadir)/alsa
+  @ALSA_TRUE@@DATAFILES_TRUE@alsaconf_DATA = audio/bluetooth.conf
+  @AUDIOPLUGIN_TRUE@@GSTREAMER_TRUE@gstreamerdir = $(libdir)/gstreamer-0.10
+--- 1263,1269 ----
+  @ALSA_TRUE@audio_libasound_module_ctl_bluetooth_la_LIBADD = \
+  @ALSA_TRUE@					lib/libbluetooth-private.la @ALSA_LIBS@
+  
+! @ALSA_TRUE@audio_libasound_module_ctl_bluetooth_la_CFLAGS = $(AM_CFLAGS) @ALSA_CFLAGS@
+  @ALSA_TRUE@@DATAFILES_TRUE@alsaconfdir = $(datadir)/alsa
+  @ALSA_TRUE@@DATAFILES_TRUE@alsaconf_DATA = audio/bluetooth.conf
+  @AUDIOPLUGIN_TRUE@@GSTREAMER_TRUE@gstreamerdir = $(libdir)/gstreamer-0.10

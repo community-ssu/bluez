@@ -1,0 +1,36 @@
+author	Michal Labedzki <michal.labedzki@tieto.com>
+commit	a0f543f0eb8ee35f5cfac3b86f0a88e3f01809ff
+	Thu, 5 Jul 2012 09:50:50 +0000 (12:50 +0300)
+
+AVRCP: Register AVRCP before MEDIA interface
+
+Register AVRCP before MEDIA interface to avoid searching for or
+accessing non-existent AVRCP server.
+
+diff -cr bluez-4.99.pan.orig/audio/manager.c bluez-4.99.pan/audio/manager.c
+*** bluez-4.99.pan.orig/audio/manager.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/manager.c	Tue Oct 16 16:43:01 2012
+***************
+*** 1243,1248 ****
+--- 1243,1251 ----
+  	if (enabled.socket)
+  		unix_init();
+  
++ 	if (enabled.control)
++ 		btd_register_adapter_driver(&avrcp_server_driver);
++ 
+  	if (enabled.media)
+  		btd_register_adapter_driver(&media_server_driver);
+  
+***************
+*** 1255,1263 ****
+  	if (enabled.source || enabled.sink)
+  		btd_register_adapter_driver(&a2dp_server_driver);
+  
+- 	if (enabled.control)
+- 		btd_register_adapter_driver(&avrcp_server_driver);
+- 
+  	btd_register_device_driver(&audio_driver);
+  
+  	*enable_sco = (enabled.gateway || enabled.headset);
+--- 1258,1263 ----

@@ -1,0 +1,28 @@
+author	Chen Ganir <chen.ganir@ti.com>
+commit	28b48a5055e631aedab92681f890d4d560e9a600
+	Thu, 29 Mar 2012 10:18:18 +0000 (13:18 +0300)
+
+core: Fix device version in GetProperties
+
+Fix how device version is added to the property dictionary.
+
+diff -cr bluez-4.99.pan.orig/src/device.c bluez-4.99.pan/src/device.c
+*** bluez-4.99.pan.orig/src/device.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/device.c	Fri Oct 12 09:06:25 2012
+***************
+*** 383,389 ****
+  							&device->product);
+  
+  	/* Version */
+! 	if (device->product)
+  		dict_append_entry(&dict, "Version", DBUS_TYPE_UINT16,
+  							&device->version);
+  
+--- 383,389 ----
+  							&device->product);
+  
+  	/* Version */
+! 	if (device->version)
+  		dict_append_entry(&dict, "Version", DBUS_TYPE_UINT16,
+  							&device->version);
+  

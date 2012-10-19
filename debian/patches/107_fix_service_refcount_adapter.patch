@@ -1,0 +1,56 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	7977aba5e42af19756b89faa53fc599e5a87c0a1
+	Fri, 17 Aug 2012 10:51:23 +0000 (13:51 +0300)
+
+service: Fix reference counting for serv_adapter->adapter
+
+author	Ludek Finstrle <luf@pzkagis.cz>
+
+service: also own invention for not leaking ref count
+
+diff -cr bluez-4.99.pan.orig/plugins/service.c bluez-4.99.pan/plugins/service.c
+*** bluez-4.99.pan.orig/plugins/service.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/plugins/service.c	Tue Oct 16 17:43:40 2012
+***************
+*** 720,725 ****
+--- 720,728 ----
+  		exit_callback(connection, user_record);
+  	}
+  
++ 	if (serv_adapter->adapter != NULL)
++ 		btd_adapter_unref(serv_adapter->adapter);
++ 
+  	g_free(serv_adapter);
+  }
+  
+***************
+*** 733,739 ****
+  	if (serv_adapter == NULL)
+  		return -ENOMEM;
+  
+! 	serv_adapter->adapter = adapter;
+  	serv_adapter->pending_list = NULL;
+  
+  	if (g_dbus_register_interface(connection, path, SERVICE_INTERFACE,
+--- 736,743 ----
+  	if (serv_adapter == NULL)
+  		return -ENOMEM;
+  
+! 	if (adapter != NULL)
+! 		serv_adapter->adapter = btd_adapter_ref(adapter);
+  	serv_adapter->pending_list = NULL;
+  
+  	if (g_dbus_register_interface(connection, path, SERVICE_INTERFACE,
+***************
+*** 741,746 ****
+--- 745,754 ----
+  						path_unregister) == FALSE) {
+  		error("D-Bus failed to register %s interface",
+  							SERVICE_INTERFACE);
++ 
++ 		if (serv_adapter->adapter != NULL)
++ 			btd_adapter_unref(serv_adapter->adapter);
++ 
+  		g_free(serv_adapter);
+  		return -EIO;
+  	}

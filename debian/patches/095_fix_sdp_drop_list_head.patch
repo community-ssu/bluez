@@ -1,0 +1,29 @@
+author	Pavel Raiskup <praiskup@redhat.com>
+commit	c0d81fcfbf45554b05feb8f9ca4f0f21a90bb980
+	Thu, 28 Jun 2012 11:51:09 +0000 (14:51 +0300)
+
+sdptool: Fix dropping of the list head
+
+assigning sdp_list_append(0, ...) to "apseq" on line 2591 will
+drop first item in list got by sdp_list_append three lines before.
+
+diff -cr bluez-4.99.pan.orig/tools/sdptool.c bluez-4.99.pan/tools/sdptool.c
+*** bluez-4.99.pan.orig/tools/sdptool.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/tools/sdptool.c	Tue Oct 16 15:11:33 2012
+***************
+*** 2595,2601 ****
+  	proto[0] = sdp_list_append(0, &l2cap);
+  	apseq = sdp_list_append(0, proto[0]);
+  	proto[0] = sdp_list_append(proto[0], sdp_data_alloc(SDP_UINT16, &psm));
+! 	apseq = sdp_list_append(0, proto[0]);
+  
+  	sdp_uuid16_create(&cmtp, CMTP_UUID);
+  	proto[1] = sdp_list_append(0, &cmtp);
+--- 2595,2601 ----
+  	proto[0] = sdp_list_append(0, &l2cap);
+  	apseq = sdp_list_append(0, proto[0]);
+  	proto[0] = sdp_list_append(proto[0], sdp_data_alloc(SDP_UINT16, &psm));
+! 	apseq = sdp_list_append(apseq, proto[0]);
+  
+  	sdp_uuid16_create(&cmtp, CMTP_UUID);
+  	proto[1] = sdp_list_append(0, &cmtp);

@@ -1,0 +1,55 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	5a44fd78fe994251a2a1b119a20b8857ee071671
+	Thu, 19 Jul 2012 10:03:31 +0000 (13:03 +0300)
+
+AVDTP: Fix leaking remote sep capabilities
+
+124 (32 direct, 92 indirect) bytes in 2 blocks are definitely lost in loss record 220 of 259
+   at 0x4A0884D: malloc (vg_replace_malloc.c:263)
+   by 0x4C7F2BE: g_malloc (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x4C936B1: g_slice_alloc (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x4C949F2: g_slist_append (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x1376D6: caps_to_list (avdtp.c:1325)
+   by 0x13CA2F: session_cb (avdtp.c:2881)
+   by 0x4C796E4: g_main_context_dispatch (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x4C79A17: ??? (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x4C79E11: g_main_loop_run (in /usr/lib64/libglib-2.0.so.0.3200.3)
+   by 0x11FF72: main (main.c:545)
+
+diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
+*** bluez-4.99.pan.orig/audio/avdtp.c	Tue Oct 16 16:16:15 2012
+--- bluez-4.99.pan/audio/avdtp.c	Tue Oct 16 16:58:13 2012
+***************
+*** 1182,1187 ****
+--- 1182,1195 ----
+  		avdtp_unref(session);
+  }
+  
++ static void sep_free(gpointer data)
++ {
++ 	struct avdtp_remote_sep *sep = data;
++ 
++ 	g_slist_free_full(sep->caps, g_free);
++ 	g_free(sep);
++ }
++ 
+  void avdtp_unref(struct avdtp *session)
+  {
+  	struct avdtp_server *server;
+***************
+*** 1226,1232 ****
+  	if (session->req)
+  		pending_req_free(session->req);
+  
+! 	g_slist_free_full(session->seps, g_free);
+  
+  	g_free(session->buf);
+  
+--- 1234,1240 ----
+  	if (session->req)
+  		pending_req_free(session->req);
+  
+! 	g_slist_free_full(session->seps, sep_free);
+  
+  	g_free(session->buf);
+  

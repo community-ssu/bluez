@@ -1,0 +1,63 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	7cc3243d868840e025798e95ffcd46294a9a5b93
+	Mon, 17 Sep 2012 13:49:43 +0000 (16:49 +0300)
+
+cups: Free D-Bus error
+
+If D-Bus error is set we should free it.
+
+diff -cr bluez-4.99.pan.orig/cups/main.c bluez-4.99.pan/cups/main.c
+*** bluez-4.99.pan.orig/cups/main.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/cups/main.c	Wed Oct 17 05:47:01 2012
+***************
+*** 446,453 ****
+  
+  	dbus_message_unref(message);
+  
+! 	if (dbus_error_is_set(&error))
+  		return FALSE;
+  
+  	dbus_message_iter_init(reply, &reply_iter);
+  	if (dbus_message_iter_get_arg_type(&reply_iter) != DBUS_TYPE_ARRAY) {
+--- 446,455 ----
+  
+  	dbus_message_unref(message);
+  
+! 	if (dbus_error_is_set(&error)) {
+! 		dbus_error_free(&error);
+  		return FALSE;
++ 	}
+  
+  	dbus_message_iter_init(reply, &reply_iter);
+  	if (dbus_message_iter_get_arg_type(&reply_iter) != DBUS_TYPE_ARRAY) {
+***************
+*** 549,556 ****
+  
+  	dbus_error_init(&error);
+  	hcid_exists = dbus_bus_name_has_owner(conn, "org.bluez", &error);
+! 	if (dbus_error_is_set(&error))
+  		return TRUE;
+  
+  	if (!hcid_exists)
+  		return TRUE;
+--- 551,560 ----
+  
+  	dbus_error_init(&error);
+  	hcid_exists = dbus_bus_name_has_owner(conn, "org.bluez", &error);
+! 	if (dbus_error_is_set(&error)) {
+! 		dbus_error_free(&error);
+  		return TRUE;
++ 	}
+  
+  	if (!hcid_exists)
+  		return TRUE;
+***************
+*** 570,575 ****
+--- 574,580 ----
+  	dbus_message_unref(message);
+  
+  	if (dbus_error_is_set(&error)) {
++ 		dbus_error_free(&error);
+  		dbus_connection_unref(conn);
+  		/* No adapter */
+  		return TRUE;

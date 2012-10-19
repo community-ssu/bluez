@@ -1,0 +1,26 @@
+author	Chan-yeol Park <chanyeol.park@samsung.com>
+commit	5c092d37f34c4986aa0a132bba218e5d15b45ebd
+	Mon, 16 Apr 2012 10:15:19 +0000 (13:15 +0300)
+
+audio: Add SBC NULL check for GST AVDTP signaling
+
+Due to RF condition or headset malfunctioning, gst audio plug-in could
+not get SBC (mandatory codec) information.
+
+diff -cr bluez-4.99.pan.orig/audio/gstavdtpsink.c bluez-4.99.pan/audio/gstavdtpsink.c
+*** bluez-4.99.pan.orig/audio/gstavdtpsink.c	Mon Oct 15 04:20:15 2012
+--- bluez-4.99.pan/audio/gstavdtpsink.c	Mon Oct 15 04:50:37 2012
+***************
+*** 1121,1126 ****
+--- 1121,1131 ----
+  	sbc = (void *) gst_avdtp_find_caps(self, BT_A2DP_SBC_SINK);
+  	mpeg = (void *) gst_avdtp_find_caps(self, BT_A2DP_MPEG12_SINK);
+  
++ 	if (!sbc) {
++ 		GST_ERROR_OBJECT(self, "Failed to find mandatory SBC sink");
++ 		return FALSE;
++ 	}
++ 
+  	sbc_structure = gst_avdtp_sink_parse_sbc_caps(self, sbc);
+  	mpeg_structure = gst_avdtp_sink_parse_mpeg_caps(self, mpeg);
+  

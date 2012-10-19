@@ -1,0 +1,30 @@
+author	Elvis Pfützenreuter <epx@signove.com
+commit	ef362bee55a80de63cb512e8243c6d9b4b5843c0
+	Mon, 16 Jul 2012 19:50:22 +0000 (22:50 +0300)
+
+MCAP: Increase MTU for MCAP/HDP data channels
+
+HDP may need to send or receive PDUs up to 64512 octets (the IEEE
+11073-20601 upper limit) depending on the role, so setting MTU to
+maximum possible value.
+
+diff -cr bluez-4.99.pan.orig/health/mcap.h bluez-4.99.pan/health/mcap.h
+*** bluez-4.99.pan.orig/health/mcap.h	Sun Jul 31 02:52:19 2011
+--- bluez-4.99.pan/health/mcap.h	Tue Oct 16 16:55:29 2012
+***************
+*** 35,41 ****
+  
+  /* maximum transmission unit for channels */
+  #define MCAP_CC_MTU	48
+! #define MCAP_DC_MTU	L2CAP_DEFAULT_MTU
+  
+  /* MCAP Standard Op Codes */
+  #define MCAP_ERROR_RSP			0x00
+--- 35,41 ----
+  
+  /* maximum transmission unit for channels */
+  #define MCAP_CC_MTU	48
+! #define MCAP_DC_MTU	65535
+  
+  /* MCAP Standard Op Codes */
+  #define MCAP_ERROR_RSP			0x00

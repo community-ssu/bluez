@@ -1,0 +1,81 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	abfc2b0dd5c3e33abfdf1a815b16d492c1751c06
+	Wed, 26 Sep 2012 18:45:05 +0000 (21:45 +0300)
+
+gdbus: Fix crash when getting disconnected from the bus
+
+When getting disconnected from the bus sometimes (maybe always?)
+dbus_watch_handle() can cause the "info" context to be free'd meaning
+that we should not try to access it after the call. The only member we
+need access to is the connection pointer and as the code already has a
+ref() call for it it's only natural to solve the issue by adding a local
+variable not dependent on "info".
+
+The backtrace of the crash fixed looks as follows:
+
+ Invalid read of size 8
+   at 0x121085: watch_func (mainloop.c:105)
+   by 0x4C72694: g_main_context_dispatch (gmain.c:2539)
+   by 0x4C729C7: g_main_context_iterate.isra.23 (gmain.c:3146)
+   by 0x4C72DC1: g_main_loop_run (gmain.c:3340)
+   by 0x120541: main (main.c:551)
+ Address 0x5bbcd90 is 16 bytes inside a block of size 24 free'd
+   at 0x4A079AE: free (vg_replace_malloc.c:427)
+   by 0x4C7837E: g_free (gmem.c:252)
+   by 0x4F708BF: dbus_watch_set_data (dbus-watch.c:614)
+   by 0x4F70938: _dbus_watch_unref (dbus-watch.c:132)
+   by 0x4F6E9A7: _dbus_transport_handle_watch (dbus-transport.c:884)
+   by 0x4F59AFB: _dbus_connection_handle_watch (dbus-connection.c:1497)
+   by 0x4F70AF9: dbus_watch_handle (dbus-watch.c:683)
+   by 0x121084: watch_func (mainloop.c:103)
+   by 0x4C72694: g_main_context_dispatch (gmain.c:2539)
+   by 0x4C729C7: g_main_context_iterate.isra.23 (gmain.c:3146)
+   by 0x4C72DC1: g_main_loop_run (gmain.c:3340)
+   by 0x120541: main (main.c:551)
+
+diff -cr bluez-4.99.pan.orig/gdbus/mainloop.c bluez-4.99.pan/gdbus/mainloop.c
+*** bluez-4.99.pan.orig/gdbus/mainloop.c	Tue Mar 15 20:34:27 2011
+--- bluez-4.99.pan/gdbus/mainloop.c	Wed Oct 17 06:44:19 2012
+***************
+*** 96,103 ****
+  	struct watch_info *info = data;
+  	unsigned int flags = 0;
+  	DBusDispatchStatus status;
+  
+! 	dbus_connection_ref(info->conn);
+  
+  	if (cond & G_IO_IN)  flags |= DBUS_WATCH_READABLE;
+  	if (cond & G_IO_OUT) flags |= DBUS_WATCH_WRITABLE;
+--- 96,104 ----
+  	struct watch_info *info = data;
+  	unsigned int flags = 0;
+  	DBusDispatchStatus status;
++ 	DBusConnection *conn;
+  
+! 	conn = dbus_connection_ref(info->conn);
+  
+  	if (cond & G_IO_IN)  flags |= DBUS_WATCH_READABLE;
+  	if (cond & G_IO_OUT) flags |= DBUS_WATCH_WRITABLE;
+***************
+*** 106,115 ****
+  
+  	dbus_watch_handle(info->watch, flags);
+  
+! 	status = dbus_connection_get_dispatch_status(info->conn);
+! 	queue_dispatch(info->conn, status);
+  
+! 	dbus_connection_unref(info->conn);
+  
+  	return TRUE;
+  }
+--- 107,116 ----
+  
+  	dbus_watch_handle(info->watch, flags);
+  
+! 	status = dbus_connection_get_dispatch_status(conn);
+! 	queue_dispatch(conn, status);
+  
+! 	dbus_connection_unref(conn);
+  
+  	return TRUE;
+  }

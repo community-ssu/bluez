@@ -1,0 +1,94 @@
+author	Anderson Lizardo <anderson.lizardo@openbossa.org>
+commit	cb40056ccdbfd9749815a973c28f82cdc827bfeb
+	Thu, 12 Apr 2012 11:36:34 +0000 (14:36 +0300)
+
+audio: Fix memory leak when headset server probe() fails
+
+If RFCOMM is disabled on the kernel, headset_server_probe() fails.
+Relevant log messages:
+
+ audio/manager.c:headset_server_probe() path /org/bluez/499/hci0
+ src/adapter.c:btd_adapter_ref() 0x4bb4f78: ref=6
+ audio/manager.c:audio_adapter_ref() 0x4ca3010: ref=1
+ socket(STREAM, RFCOMM): Protocol not supported (93)
+ audio/manager.c:audio_adapter_unref() 0x4ca3010: ref=0
+ src/adapter.c:btd_adapter_unref() 0x4bb4f78: ref=5
+ audio-headset: Operation not permitted (1)
+
+The powered callback should only be registered if adapter driver probe
+was successful. The callback unregister was moved to the beginning of
+headset_server_remove() for consistency.
+
+This fixes this memory leak:
+
+==499== 8 bytes in 1 blocks are definitely lost in loss record 44 of 182
+==499==    at 0x4826444: malloc (vg_replace_malloc.c:263)
+==499==    by 0x4877243: g_malloc (gmem.c:132)
+==499==    by 0x488D088: g_slice_alloc (gslice.c:836)
+==499==    by 0x488E8A5: g_slist_append (gslist.c:230)
+==499==    by 0x18AEEE: btd_adapter_register_powered_callback
+(adapter.c:3416)
+==499==    by 0x11AF61: headset_server_probe (manager.c:919)
+==499==    by 0x18B67B: probe_driver (adapter.c:2033)
+==499==    by 0x1908F5: adapter_init (adapter.c:2048)
+==499==    by 0x189D20: btd_manager_register_adapter (manager.c:397)
+==499==    by 0x1649AF: mgmt_cmd_complete (mgmtops.c:1075)
+==499==    by 0x16665E: mgmt_event (mgmtops.c:1780)
+==499==    by 0x48B2EFA: g_io_unix_dispatch (giounix.c:162)
+
+diff -cr bluez-4.99.pan.orig/audio/manager.c bluez-4.99.pan/audio/manager.c
+*** bluez-4.99.pan.orig/audio/manager.c	Fri Oct 12 08:02:26 2012
+--- bluez-4.99.pan/audio/manager.c	Mon Oct 15 03:56:01 2012
+***************
+*** 916,929 ****
+  	if (!adp)
+  		return -EINVAL;
+  
+- 	btd_adapter_register_powered_callback(adapter, state_changed);
+- 
+  	err = headset_server_init(adp);
+  	if (err < 0) {
+  		audio_adapter_unref(adp);
+  		return err;
+  	}
+  
+  	return 0;
+  }
+  
+--- 916,929 ----
+  	if (!adp)
+  		return -EINVAL;
+  
+  	err = headset_server_init(adp);
+  	if (err < 0) {
+  		audio_adapter_unref(adp);
+  		return err;
+  	}
+  
++ 	btd_adapter_register_powered_callback(adapter, state_changed);
++ 
+  	return 0;
+  }
+  
+***************
+*** 934,939 ****
+--- 934,941 ----
+  
+  	DBG("path %s", path);
+  
++ 	btd_adapter_unregister_powered_callback(adapter, state_changed);
++ 
+  	adp = find_adapter(adapters, adapter);
+  	if (!adp)
+  		return;
+***************
+*** 960,967 ****
+  		adp->hfp_ag_server = NULL;
+  	}
+  
+- 	btd_adapter_unregister_powered_callback(adapter, state_changed);
+- 
+  	audio_adapter_unref(adp);
+  }
+  
+--- 962,967 ----

@@ -1,0 +1,36 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	4b6c1b7311f4964a956ef809ffb94262c69613c4
+	Mon, 16 Apr 2012 19:55:29 +0000 (22:55 +0300)
+
+sdp: Fix compilation warning due to data type mismatch
+
+In certain cross compiling environment, if we build the code with
+enabling the maintainer mode, the following error happens.
+
+cc1: warnings being treated as errors
+lib/sdp.c: In function 'sdp_process':
+lib/sdp.c:4111:6: error: comparison between signed and unsigned integer
+expressions
+make[2]: *** [lib/sdp.lo] Error 1
+make[1]: *** [all] Error 2
+
+diff -cr bluez-4.99.pan.orig/lib/sdp.c bluez-4.99.pan/lib/sdp.c
+*** bluez-4.99.pan.orig/lib/sdp.c	Fri Oct 12 08:18:34 2012
+--- bluez-4.99.pan/lib/sdp.c	Mon Oct 15 05:03:16 2012
+***************
+*** 4108,4114 ****
+  	}
+  
+  	if (n == 0 || reqhdr->tid != rsphdr->tid ||
+! 		(n != (ntohs(rsphdr->plen) + (int) sizeof(sdp_pdu_hdr_t)))) {
+  		t->err = EPROTO;
+  		SDPERR("Protocol error.");
+  		goto end;
+--- 4108,4114 ----
+  	}
+  
+  	if (n == 0 || reqhdr->tid != rsphdr->tid ||
+! 		(n != (int) (ntohs(rsphdr->plen) + sizeof(sdp_pdu_hdr_t)))) {
+  		t->err = EPROTO;
+  		SDPERR("Protocol error.");
+  		goto end;

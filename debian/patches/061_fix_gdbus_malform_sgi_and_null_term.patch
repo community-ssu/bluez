@@ -1,0 +1,40 @@
+author	Lucas De Marchi <lucas.demarchi@profusion.mobi>
+commit	417d4851198adc3715f61747737527bf5ec2eb40
+	Fri, 18 May 2012 02:52:59 +0000 (19:52 -0700)
+
+gdbus: return if method signature is malformed
+
+author	Lucas De Marchi <lucas.demarchi@profusion.mobi>
+commit	a40aa24e83e94bc0c4b3a8d30a314b4a03074a81
+	Fri, 18 May 2012 02:53:53 +0000 (19:53 -0700)
+
+gdbus: do not call memset for terminating NULL
+
+diff -cr bluez-4.99.pan.orig/gdbus/object.c bluez-4.99.pan/gdbus/object.c
+*** bluez-4.99.pan.orig/gdbus/object.c	Sun Jul 31 02:52:19 2011
+--- bluez-4.99.pan/gdbus/object.c	Mon Oct 15 07:45:28 2012
+***************
+*** 72,78 ****
+  
+  		complete = FALSE;
+  		struct_level = dict_level = 0;
+- 		memset(type, 0, sizeof(type));
+  
+  		/* Gather enough data to have a single complete type */
+  		for (len = 0; len < (sizeof(type) - 1) && sig[i]; len++, i++) {
+--- 72,77 ----
+***************
+*** 107,112 ****
+--- 106,117 ----
+  				break;
+  		}
+  
++ 		type[len + 1] = '\0';
++ 
++ 		if (!complete) {
++ 			error("Unexpected signature: %s", sig);
++ 			return;
++ 		}
+  
+  		if (direction)
+  			g_string_append_printf(gstr,

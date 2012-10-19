@@ -1,0 +1,19 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	160b1bfa39e6e69f13f0a1293811f0e4e722168e
+	Fri, 21 Sep 2012 12:11:21 +0000 (15:11 +0300)
+
+core: Fix Device.Disconnect() DBusMessage leak
+
+diff -cr bluez-4.99.pan.orig/src/device.c bluez-4.99.pan/src/device.c
+*** bluez-4.99.pan.orig/src/device.c	Tue Oct 16 19:20:41 2012
+--- bluez-4.99.pan/src/device.c	Wed Oct 17 06:05:36 2012
+***************
+*** 924,929 ****
+--- 924,930 ----
+  
+  		g_dbus_send_reply(conn, msg, DBUS_TYPE_INVALID);
+  		device->disconnects = g_slist_remove(device->disconnects, msg);
++ 		dbus_message_unref(msg);
+  	}
+  
+  	if (device_is_paired(device) && !device_is_bonded(device))

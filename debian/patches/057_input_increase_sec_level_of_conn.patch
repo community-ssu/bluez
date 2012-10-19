@@ -1,0 +1,126 @@
+author	Gustavo Padovan <gustavo@padovan.org>
+commit	17caffb924d29bace3ac5853c237b82c54f6d763
+	Tue, 8 May 2012 06:44:04 +0000 (23:44 -0700)
+
+input: increase security level of the connection
+
+diff -cr bluez-4.99.pan.orig/input/device.c bluez-4.99.pan/input/device.c
+*** bluez-4.99.pan.orig/input/device.c	Mon Oct 15 04:47:42 2012
+--- bluez-4.99.pan/input/device.c	Mon Oct 15 05:55:27 2012
+***************
+*** 75,81 ****
+--- 75,83 ----
+  	GIOChannel		*intr_io;
+  	guint			ctrl_watch;
+  	guint			intr_watch;
++ 	guint			sec_watch;
+  	int			timeout;
++ 	struct hidp_connadd_req	*req;
+  	struct input_device	*idev;
+  };
+  
+***************
+*** 132,137 ****
+--- 134,142 ----
+  	if (iconn->intr_watch)
+  		g_source_remove(iconn->intr_watch);
+  
++ 	if (iconn->sec_watch)
++ 		g_source_remove(iconn->sec_watch);
++ 
+  	if (iconn->intr_io)
+  		g_io_channel_unref(iconn->intr_io);
+  
+***************
+*** 571,584 ****
+  	g_free(req);
+  }
+  
+  static int hidp_add_connection(const struct input_device *idev,
+! 				const struct input_conn *iconn)
+  {
+  	struct hidp_connadd_req *req;
+  	struct fake_hid *fake_hid;
+  	struct fake_input *fake;
+  	sdp_record_t *rec;
+  	char src_addr[18], dst_addr[18];
+  	int err;
+  
+  	req = g_new0(struct hidp_connadd_req, 1);
+--- 576,606 ----
+  	g_free(req);
+  }
+  
++ static gboolean encrypt_notify(GIOChannel *io, GIOCondition condition,
++ 								gpointer data)
++ {
++ 	struct input_conn *iconn = data;
++ 	struct hidp_connadd_req *req = iconn->req;
++ 
++ 	DBG(" ");
++ 
++ 	encrypt_completed(0, req);
++ 
++ 	iconn->sec_watch = 0;
++ 	iconn->req = NULL;
++ 
++ 	return FALSE;
++ }
++ 
+  static int hidp_add_connection(const struct input_device *idev,
+! 					 struct input_conn *iconn)
+  {
+  	struct hidp_connadd_req *req;
+  	struct fake_hid *fake_hid;
+  	struct fake_input *fake;
+  	sdp_record_t *rec;
+  	char src_addr[18], dst_addr[18];
++ 	GError *gerr = NULL;
+  	int err;
+  
+  	req = g_new0(struct hidp_connadd_req, 1);
+***************
+*** 632,638 ****
+  		if (err == 0) {
+  			/* Waiting async encryption */
+  			return 0;
+! 		} else if (err != -EALREADY) {
+  			error("encrypt_link: %s (%d)", strerror(-err), -err);
+  			goto cleanup;
+  		}
+--- 654,665 ----
+  		if (err == 0) {
+  			/* Waiting async encryption */
+  			return 0;
+! 		}
+! 		
+! 		if (err == -ENOSYS)
+! 			goto nosys;
+! 
+! 		if (err != -EALREADY) {
+  			error("encrypt_link: %s (%d)", strerror(-err), -err);
+  			goto cleanup;
+  		}
+***************
+*** 645,650 ****
+--- 672,691 ----
+  	g_free(req);
+  
+  	return err;
++ 
++ nosys:
++ 	if (!bt_io_set(iconn->intr_io, BT_IO_L2CAP, &gerr,
++ 				BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_MEDIUM,
++ 				BT_IO_OPT_INVALID)) {
++ 		error("btio: %s", gerr->message);
++ 		g_error_free(gerr);
++ 		goto cleanup;
++ 	}
++ 
++ 	iconn->req = req;
++ 	iconn->sec_watch = g_io_add_watch(iconn->intr_io, G_IO_OUT,
++ 							encrypt_notify, iconn);
++ 	return 0;
+  }
+  
+  static int is_connected(struct input_conn *iconn)

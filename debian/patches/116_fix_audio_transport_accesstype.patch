@@ -1,0 +1,421 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	6e62d4a0fa33968b6c7a8e0d543bca2cdac323ed
+	Fri, 14 Sep 2012 12:09:17 +0000 (15:09 +0300)
+
+media: Fix accesstype comparison
+
+Replace the string representation of the accesstype with a conventional
+binary representation. This makes the code simpler and more efficient.
+
+This also fixes a minor bug in the Release() D-Bus method, where the
+string comparison was used to see whether the owner should be removed. A
+client acquiring with "rw" and releasing with "wr" would lead to the
+inconsistent state of having a released transport with an owner with no
+accesstype. Partial releases can also get affected by this bug since the
+released character (partial accesstype) got replaced by a whitespace.
+
+Additionally, this approach is more robust in case new flags are added
+in the future.
+
+diff -cr bluez-4.99.pan.orig/audio/transport.c bluez-4.99.pan/audio/transport.c
+*** bluez-4.99.pan.orig/audio/transport.c	Wed Oct 17 15:33:24 2012
+--- bluez-4.99.pan/audio/transport.c	Wed Oct 17 15:26:46 2012
+***************
+*** 50,55 ****
+--- 50,60 ----
+  
+  #define MEDIA_TRANSPORT_INTERFACE "org.bluez.MediaTransport"
+  
++ typedef enum {
++ 	TRANSPORT_LOCK_READ = 1,
++ 	TRANSPORT_LOCK_WRITE = 1 << 1,
++ } transport_lock_t;
++ 
+  struct media_request {
+  	DBusMessage		*msg;
+  	guint			id;
+***************
+*** 59,65 ****
+  	struct media_transport	*transport;
+  	struct media_request	*pending;
+  	char			*name;
+! 	char			*accesstype;
+  	guint			watch;
+  };
+  
+--- 64,70 ----
+  	struct media_transport	*transport;
+  	struct media_request	*pending;
+  	char			*name;
+! 	transport_lock_t	lock;
+  	guint			watch;
+  };
+  
+***************
+*** 77,84 ****
+  	uint16_t		omtu;		/* Transport output mtu */
+  	uint16_t		delay;		/* Transport delay (a2dp only) */
+  	unsigned int		nrec_id;	/* Transport nrec watch (headset only) */
+! 	gboolean		read_lock;
+! 	gboolean		write_lock;
+  	gboolean		in_use;
+  	guint			(*resume) (struct media_transport *transport,
+  					struct media_owner *owner);
+--- 82,88 ----
+  	uint16_t		omtu;		/* Transport output mtu */
+  	uint16_t		delay;		/* Transport delay (a2dp only) */
+  	unsigned int		nrec_id;	/* Transport nrec watch (headset only) */
+! 	transport_lock_t	lock;
+  	gboolean		in_use;
+  	guint			(*resume) (struct media_transport *transport,
+  					struct media_owner *owner);
+***************
+*** 95,100 ****
+--- 99,129 ----
+  					DBusMessageIter *value);
+  };
+  
++ static const char *lock2str(transport_lock_t lock)
++ {
++ 	if (lock == 0)
++ 		return "";
++ 	else if (lock == TRANSPORT_LOCK_READ)
++ 		return "r";
++ 	else if (lock == TRANSPORT_LOCK_WRITE)
++ 		return "w";
++ 	else
++ 		return "rw";
++ }
++ 
++ static transport_lock_t str2lock(const char *str)
++ {
++ 	transport_lock_t lock = 0;
++ 
++ 	if (g_strstr_len(str, -1, "r") != NULL)
++ 		lock |= TRANSPORT_LOCK_READ;
++ 
++ 	if (g_strstr_len(str, -1, "w") != NULL)
++ 		lock |= TRANSPORT_LOCK_WRITE;
++ 
++ 	return lock;
++ }
++ 
+  void media_transport_destroy(struct media_transport *transport)
+  {
+  	char *path;
+***************
+*** 139,155 ****
+  }
+  
+  static gboolean media_transport_release(struct media_transport *transport,
+! 					const char *accesstype)
+  {
+! 	if (g_strstr_len(accesstype, -1, "r") != NULL) {
+! 		transport->read_lock = FALSE;
+  		DBG("Transport %s: read lock released", transport->path);
+- 	}
+  
+! 	if (g_strstr_len(accesstype, -1, "w") != NULL) {
+! 		transport->write_lock = FALSE;
+  		DBG("Transport %s: write lock released", transport->path);
+- 	}
+  
+  	return TRUE;
+  }
+--- 168,182 ----
+  }
+  
+  static gboolean media_transport_release(struct media_transport *transport,
+! 							transport_lock_t lock)
+  {
+! 	transport->lock &= ~lock;
+! 
+! 	if (lock & TRANSPORT_LOCK_READ)
+  		DBG("Transport %s: read lock released", transport->path);
+  
+! 	if (lock & TRANSPORT_LOCK_WRITE)
+  		DBG("Transport %s: write lock released", transport->path);
+  
+  	return TRUE;
+  }
+***************
+*** 182,188 ****
+  	media_owner_remove(owner);
+  
+  	g_free(owner->name);
+- 	g_free(owner->accesstype);
+  	g_free(owner);
+  }
+  
+--- 209,214 ----
+***************
+*** 191,197 ****
+  {
+  	DBG("Transport %s Owner %s", transport->path, owner->name);
+  
+! 	media_transport_release(transport, owner->accesstype);
+  
+  	/* Reply if owner has a pending request */
+  	if (owner->pending)
+--- 217,223 ----
+  {
+  	DBG("Transport %s Owner %s", transport->path, owner->name);
+  
+! 	media_transport_release(transport, owner->lock);
+  
+  	/* Reply if owner has a pending request */
+  	if (owner->pending)
+***************
+*** 251,260 ****
+  
+  	media_transport_set_fd(transport, fd, imtu, omtu);
+  
+! 	if (g_strstr_len(owner->accesstype, -1, "r") == NULL)
+  		imtu = 0;
+  
+! 	if (g_strstr_len(owner->accesstype, -1, "w") == NULL)
+  		omtu = 0;
+  
+  	ret = g_dbus_send_reply(transport->conn, req->msg,
+--- 277,286 ----
+  
+  	media_transport_set_fd(transport, fd, imtu, omtu);
+  
+! 	if ((owner->lock & TRANSPORT_LOCK_READ) == 0)
+  		imtu = 0;
+  
+! 	if ((owner->lock & TRANSPORT_LOCK_WRITE) == 0)
+  		omtu = 0;
+  
+  	ret = g_dbus_send_reply(transport->conn, req->msg,
+***************
+*** 361,370 ****
+  
+  	media_transport_set_fd(transport, fd, imtu, omtu);
+  
+! 	if (g_strstr_len(owner->accesstype, -1, "r") == NULL)
+  		imtu = 0;
+  
+! 	if (g_strstr_len(owner->accesstype, -1, "w") == NULL)
+  		omtu = 0;
+  
+  	ret = g_dbus_send_reply(transport->conn, req->msg,
+--- 387,396 ----
+  
+  	media_transport_set_fd(transport, fd, imtu, omtu);
+  
+! 	if ((owner->lock & TRANSPORT_LOCK_READ) == 0)
+  		imtu = 0;
+  
+! 	if ((owner->lock & TRANSPORT_LOCK_WRITE) == 0)
+  		omtu = 0;
+  
+  	ret = g_dbus_send_reply(transport->conn, req->msg,
+***************
+*** 466,475 ****
+  
+  	media_transport_set_fd(transport, fd, imtu, omtu);
+  
+! 	if (g_strstr_len(owner->accesstype, -1, "r") == NULL)
+  		imtu = 0;
+  
+! 	if (g_strstr_len(owner->accesstype, -1, "w") == NULL)
+  		omtu = 0;
+  
+  	ret = g_dbus_send_reply(transport->conn, req->msg,
+--- 492,501 ----
+  
+  	media_transport_set_fd(transport, fd, imtu, omtu);
+  
+! 	if ((owner->lock & TRANSPORT_LOCK_READ) == 0)
+  		imtu = 0;
+  
+! 	if ((owner->lock & TRANSPORT_LOCK_WRITE) == 0)
+  		omtu = 0;
+  
+  	ret = g_dbus_send_reply(transport->conn, req->msg,
+***************
+*** 559,594 ****
+  }
+  
+  static gboolean media_transport_acquire(struct media_transport *transport,
+! 							const char *accesstype)
+  {
+! 	gboolean read_lock = FALSE, write_lock = FALSE;
+! 
+! 	if (g_strstr_len(accesstype, -1, "r") != NULL) {
+! 		if (transport->read_lock == TRUE)
+! 			return FALSE;
+! 		read_lock = TRUE;
+! 	}
+! 
+! 	if (g_strstr_len(accesstype, -1, "w") != NULL) {
+! 		if (transport->write_lock == TRUE)
+! 			return FALSE;
+! 		write_lock = TRUE;
+! 	}
+! 
+! 	/* Check invalid accesstype */
+! 	if (read_lock == FALSE && write_lock == FALSE)
+  		return FALSE;
+  
+! 	if (read_lock) {
+! 		transport->read_lock = read_lock;
+  		DBG("Transport %s: read lock acquired", transport->path);
+- 	}
+  
+! 	if (write_lock) {
+! 		transport->write_lock = write_lock;
+  		DBG("Transport %s: write lock acquired", transport->path);
+- 	}
+- 
+  
+  	return TRUE;
+  }
+--- 585,602 ----
+  }
+  
+  static gboolean media_transport_acquire(struct media_transport *transport,
+! 							transport_lock_t lock)
+  {
+! 	if (transport->lock & lock)
+  		return FALSE;
+  
+! 	transport->lock |= lock;
+! 
+! 	if (lock & TRANSPORT_LOCK_READ)
+  		DBG("Transport %s: read lock acquired", transport->path);
+  
+! 	if (lock & TRANSPORT_LOCK_WRITE)
+  		DBG("Transport %s: write lock acquired", transport->path);
+  
+  	return TRUE;
+  }
+***************
+*** 606,621 ****
+  
+  static struct media_owner *media_owner_create(DBusConnection *conn,
+  						DBusMessage *msg,
+! 						const char *accesstype)
+  {
+  	struct media_owner *owner;
+  
+  	owner = g_new0(struct media_owner, 1);
+  	owner->name = g_strdup(dbus_message_get_sender(msg));
+! 	owner->accesstype = g_strdup(accesstype);
+  
+  	DBG("Owner created: sender=%s accesstype=%s", owner->name,
+! 			accesstype);
+  
+  	return owner;
+  }
+--- 614,629 ----
+  
+  static struct media_owner *media_owner_create(DBusConnection *conn,
+  						DBusMessage *msg,
+! 						transport_lock_t lock)
+  {
+  	struct media_owner *owner;
+  
+  	owner = g_new0(struct media_owner, 1);
+  	owner->name = g_strdup(dbus_message_get_sender(msg));
+! 	owner->lock = lock;
+  
+  	DBG("Owner created: sender=%s accesstype=%s", owner->name,
+! 							lock2str(lock));
+  
+  	return owner;
+  }
+***************
+*** 652,657 ****
+--- 660,666 ----
+  	struct media_owner *owner;
+  	struct media_request *req;
+  	const char *accesstype, *sender;
++ 	transport_lock_t lock;
+  	guint id;
+  
+  	if (!dbus_message_get_args(msg, NULL,
+***************
+*** 665,677 ****
+  	if (owner != NULL)
+  		return btd_error_not_authorized(msg);
+  
+! 	if (media_transport_acquire(transport, accesstype) == FALSE)
+  		return btd_error_not_authorized(msg);
+  
+! 	owner = media_owner_create(conn, msg, accesstype);
+  	id = transport->resume(transport, owner);
+  	if (id == 0) {
+! 		media_transport_release(transport, accesstype);
+  		media_owner_free(owner);
+  		return btd_error_not_authorized(msg);
+  	}
+--- 674,690 ----
+  	if (owner != NULL)
+  		return btd_error_not_authorized(msg);
+  
+! 	lock = str2lock(accesstype);
+! 	if (lock == 0)
+! 		return btd_error_invalid_args(msg);
+! 
+! 	if (media_transport_acquire(transport, lock) == FALSE)
+  		return btd_error_not_authorized(msg);
+  
+! 	owner = media_owner_create(conn, msg, lock);
+  	id = transport->resume(transport, owner);
+  	if (id == 0) {
+! 		media_transport_release(transport, lock);
+  		media_owner_free(owner);
+  		return btd_error_not_authorized(msg);
+  	}
+***************
+*** 689,694 ****
+--- 702,708 ----
+  	struct media_transport *transport = data;
+  	struct media_owner *owner;
+  	const char *accesstype, *sender;
++ 	transport_lock_t lock;
+  	struct media_request *req;
+  
+  	if (!dbus_message_get_args(msg, NULL,
+***************
+*** 702,708 ****
+  	if (owner == NULL)
+  		return btd_error_not_authorized(msg);
+  
+! 	if (g_strcmp0(owner->accesstype, accesstype) == 0) {
+  		guint id;
+  
+  		/* Not the last owner, no need to suspend */
+--- 716,724 ----
+  	if (owner == NULL)
+  		return btd_error_not_authorized(msg);
+  
+! 	lock = str2lock(accesstype);
+! 
+! 	if (owner->lock == lock) {
+  		guint id;
+  
+  		/* Not the last owner, no need to suspend */
+***************
+*** 732,740 ****
+  		media_owner_add(owner, req);
+  
+  		return NULL;
+! 	} else if (g_strstr_len(owner->accesstype, -1, accesstype) != NULL) {
+! 		media_transport_release(transport, accesstype);
+! 		g_strdelimit(owner->accesstype, accesstype, ' ');
+  	} else
+  		return btd_error_not_authorized(msg);
+  
+--- 748,756 ----
+  		media_owner_add(owner, req);
+  
+  		return NULL;
+! 	} else if ((owner->lock & lock) == lock) {
+! 		media_transport_release(transport, lock);
+! 		owner->lock &= ~lock;
+  	} else
+  		return btd_error_not_authorized(msg);
+  

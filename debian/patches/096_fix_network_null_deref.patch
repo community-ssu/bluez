@@ -1,0 +1,42 @@
+author	Pavel Raiskup <praiskup@redhat.com>
+commit	b57c64f1aa5c51dd785f2572636b8c41ada06d72
+	Thu, 28 Jun 2012 11:51:13 +0000 (14:51 +0300)
+
+network: NULL dereference fix
+
+Variable ifindex dereferenced on line 242 before null check on line 249.
+
+diff -cr bluez-4.99.pan.orig/network/common.c bluez-4.99.pan/network/common.c
+*** bluez-4.99.pan.orig/network/common.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/network/common.c	Fri Oct 12 06:40:17 2012
+***************
+*** 239,251 ****
+  
+  int bnep_add_to_bridge(const char *devname, const char *bridge)
+  {
+! 	int ifindex = if_nametoindex(devname);
+  	struct ifreq ifr;
+  	int sk, err;
+  
+  	if (!devname || !bridge)
+  		return -EINVAL;
+  
+  	sk = socket(AF_INET, SOCK_STREAM, 0);
+  	if (sk < 0)
+  		return -1;
+--- 239,253 ----
+  
+  int bnep_add_to_bridge(const char *devname, const char *bridge)
+  {
+! 	int ifindex;
+  	struct ifreq ifr;
+  	int sk, err;
+  
+  	if (!devname || !bridge)
+  		return -EINVAL;
+  
++ 	ifindex = if_nametoindex(devname);
++ 
+  	sk = socket(AF_INET, SOCK_STREAM, 0);
+  	if (sk < 0)
+  		return -1;

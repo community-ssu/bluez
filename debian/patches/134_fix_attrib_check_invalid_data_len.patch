@@ -1,0 +1,25 @@
+author	Vinicius Costa Gomes <vinicius.gomes@openbossa.org>
+commit	a48a3bac3ab1e12ea145ca46dd30cdf948761a73
+	Thu, 11 Oct 2012 06:48:09 +0000 (08:48 +0200)
+
+att: Fix sending pdu's with invalid data
+
+When encoding an att_data_list we need to make sure that each element
+lenght of the data list will not exceed 255, because that information
+will be encoded as a octet later.
+
+diff -cr bluez-4.99.pan.orig/attrib/att.c bluez-4.99.pan/attrib/att.c
+*** bluez-4.99.pan.orig/attrib/att.c	Tue Oct 16 14:44:12 2012
+--- bluez-4.99.pan/attrib/att.c	Wed Oct 17 08:35:15 2012
+***************
+*** 101,106 ****
+--- 101,109 ----
+  	struct att_data_list *list;
+  	int i;
+  
++ 	if (len > UINT8_MAX)
++ 		return NULL;
++ 
+  	list = g_new0(struct att_data_list, 1);
+  	list->len = len;
+  	list->num = num;

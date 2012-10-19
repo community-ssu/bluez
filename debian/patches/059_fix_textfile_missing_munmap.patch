@@ -1,0 +1,31 @@
+author	Vishal Agarwal <vishal.agarwal@stericsson.com>
+commit	96965948de16da000b29fcdc31c5af270b69bd1a
+	Wed, 16 May 2012 08:13:13 +0000 (11:13 +0300)
+
+textfile: fix missing call to munmap in wite_key
+
+In some cases it was possible that munmap is not called corresponding
+to mmap, which might result in future read or writes to fail.
+
+diff -cr bluez-4.99.pan.orig/src/textfile.c bluez-4.99.pan/src/textfile.c
+*** bluez-4.99.pan.orig/src/textfile.c	Fri Oct 12 09:05:31 2012
+--- bluez-4.99.pan/src/textfile.c	Mon Oct 15 07:37:45 2012
+***************
+*** 220,227 ****
+  	len = strlen(key);
+  	off = find_key(map, size, key, len, icase);
+  	if (!off) {
+  		if (value) {
+- 			munmap(map, size);
+  			lseek(fd, size, SEEK_SET);
+  			err = write_key_value(fd, key, value);
+  		}
+--- 220,227 ----
+  	len = strlen(key);
+  	off = find_key(map, size, key, len, icase);
+  	if (!off) {
++ 		munmap(map, size);
+  		if (value) {
+  			lseek(fd, size, SEEK_SET);
+  			err = write_key_value(fd, key, value);
+  		}

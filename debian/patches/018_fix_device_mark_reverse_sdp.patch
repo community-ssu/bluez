@@ -1,0 +1,33 @@
+author	Vinicius Costa Gomes <vinicius.gomes@openbossa.org>
+commit	9c4712a9995f27c1dd7c8145ca54eb27f14af0a8
+	Tue, 20 Mar 2012 18:05:00 +0000 (15:05 -0300)
+
+Fix not marking a reverse SDP discovery as "reverse"
+
+Some devices "hide" some of their records while connected to other
+devices. Setting a service discovery as reverse makes BlueZ to not
+remove the records that are "hidden".
+
+This patch fixes a mistake that reverse parameter was changed to false
+when it should be true.
+
+diff -cr bluez-4.99.pan.orig/src/device.c bluez-4.99.pan/src/device.c
+*** bluez-4.99.pan.orig/src/device.c	Fri Oct 12 07:59:48 2012
+--- bluez-4.99.pan/src/device.c	Fri Oct 12 08:14:27 2012
+***************
+*** 2204,2210 ****
+  	struct btd_device *device = user_data;
+  
+  	if (device_is_bredr(device))
+! 		device_browse_sdp(device, NULL, NULL, NULL, FALSE);
+  	else
+  		device_browse_primary(device, NULL, NULL, FALSE);
+  
+--- 2204,2210 ----
+  	struct btd_device *device = user_data;
+  
+  	if (device_is_bredr(device))
+! 		device_browse_sdp(device, NULL, NULL, NULL, TRUE);
+  	else
+  		device_browse_primary(device, NULL, NULL, FALSE);
+  

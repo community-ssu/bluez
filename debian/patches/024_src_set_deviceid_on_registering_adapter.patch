@@ -1,0 +1,68 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	1ac88d03313b31aec630e221c479e3242781f19b
+	Wed, 28 Mar 2012 10:15:28 +0000 (13:15 +0300)
+
+Set DeviceID when registering adapter not when sdp server is starting
+
+Adapter ops are registered after sdp server is started. Thus no
+adapters were registered yet when setting DID on sdp startup and DID
+was never set.
+
+diff -cr bluez-4.99.pan.orig/src/manager.c bluez-4.99.pan/src/manager.c
+*** bluez-4.99.pan.orig/src/manager.c	Fri Oct 12 09:00:27 2012
+--- bluez-4.99.pan/src/manager.c	Fri Oct 12 09:03:36 2012
+***************
+*** 413,418 ****
+--- 413,422 ----
+  	if (default_adapter_id < 0)
+  		manager_set_default_adapter(id);
+  
++ 	if (main_opts.did_source)
++ 		btd_adapter_set_did(adapter, main_opts.did_vendor,
++ 				main_opts.did_product, main_opts.did_version);
++ 
+  	DBG("Adapter %s registered", path);
+  
+  	return btd_adapter_ref(adapter);
+***************
+*** 435,448 ****
+  
+  	return 0;
+  }
+- 
+- void btd_manager_set_did(uint16_t vendor, uint16_t product, uint16_t version)
+- {
+- 	GSList *l;
+- 
+- 	for (l = adapters; l != NULL; l = g_slist_next(l)) {
+- 		struct btd_adapter *adapter = l->data;
+- 
+- 		btd_adapter_set_did(adapter, vendor, product, version);
+- 	}
+- }
+--- 439,441 ----
+diff -cr bluez-4.99.pan.orig/src/manager.h bluez-4.99.pan/src/manager.h
+*** bluez-4.99.pan.orig/src/manager.h	Fri Oct 12 09:00:27 2012
+--- bluez-4.99.pan/src/manager.h	Fri Oct 12 09:03:57 2012
+***************
+*** 41,44 ****
+  struct btd_adapter *btd_manager_register_adapter(int id, gboolean up);
+  int btd_manager_unregister_adapter(int id);
+  void manager_add_adapter(const char *path);
+- void btd_manager_set_did(uint16_t vendor, uint16_t product, uint16_t version);
+--- 41,43 ----
+diff -cr bluez-4.99.pan.orig/src/sdpd-service.c bluez-4.99.pan/src/sdpd-service.c
+*** bluez-4.99.pan.orig/src/sdpd-service.c	Fri Oct 12 09:00:27 2012
+--- bluez-4.99.pan/src/sdpd-service.c	Fri Oct 12 09:01:38 2012
+***************
+*** 187,195 ****
+  	info("Adding device id record for %04x:%04x:%04x", main_opts.did_vendor,
+  				main_opts.did_product, main_opts.did_version);
+  
+- 	btd_manager_set_did(main_opts.did_vendor, main_opts.did_product,
+- 							main_opts.did_version);
+- 
+  	record->handle = sdp_next_handle();
+  
+  	sdp_record_add(BDADDR_ANY, record);
+--- 187,192 ----

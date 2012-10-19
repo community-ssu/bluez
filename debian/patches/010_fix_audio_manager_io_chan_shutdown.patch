@@ -1,0 +1,32 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	8e6f1054e8a35cb5211745bd401a51783ab498b7
+	Tue, 13 Mar 2012 13:53:17 +0000 (15:53 +0200)
+
+audio: fix missing io channel shutdown
+
+Channel must be explicitly shut down because otherwise the reference
+counter never reaches zero, due to the server installed by bt_io_listen.
+
+diff -cr bluez-4.99.pan.orig/audio/manager.c bluez-4.99.pan/audio/manager.c
+*** bluez-4.99.pan.orig/audio/manager.c	Fri Oct 12 07:42:54 2012
+--- bluez-4.99.pan/audio/manager.c	Fri Oct 12 07:43:53 2012
+***************
+*** 761,766 ****
+--- 761,767 ----
+  	if (add_record_to_server(&src, record) < 0) {
+  		error("Unable to register HFP HS service record");
+  		sdp_record_free(record);
++ 		g_io_channel_shutdown(adapter->hfp_hs_server, TRUE, NULL);
+  		g_io_channel_unref(adapter->hfp_hs_server);
+  		adapter->hfp_hs_server = NULL;
+  		return -1;
+***************
+*** 994,999 ****
+--- 995,1001 ----
+  	}
+  
+  	if (adp->hfp_hs_server) {
++ 		g_io_channel_shutdown(adp->hfp_hs_server, TRUE, NULL);
+  		g_io_channel_unref(adp->hfp_hs_server);
+  		adp->hfp_hs_server = NULL;
+  	}

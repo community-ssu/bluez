@@ -1,0 +1,155 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	91cc14225d64ec327672fd9bd845091f41b43213
+	Tue, 2 Oct 2012 07:44:35 +0000 (10:44 +0300)
+
+audio: Fix crash on gateway close while connected
+
+RFCOMM and SCO watches need to be removed in gateway_close(), otherwise
+the watch callbacks might get called later on, resulting in a second
+call to gateway_close().
+
+The issue can be easily reproduced if a device is removed (unpaired) a
+device while HFP gateway is connected:
+
+bluetoothd[26579]: audio/gateway.c:path_unregister() Unregistered interface org.bluez.HandsfreeGateway on path /org/bluez/26579/hci0/dev_90_84_0D_B2_C7_04
+bluetoothd[26579]: audio/media.c:gateway_state_changed()
+bluetoothd[26579]: audio/media.c:gateway_state_changed() Clear endpoint 0x555555822cb0
+bluetoothd[26579]: audio/source.c:path_unregister() Unregistered interface org.bluez.AudioSource on path /org/bluez/26579/hci0/dev_90_84_0D_B2_C7_04
+bluetoothd[26579]: audio/avdtp.c:avdtp_unref() 0x555555827980: ref=2
+bluetoothd[26579]: src/device.c:btd_device_unref() 0x55555581a470: ref=1
+bluetoothd[26579]: src/device.c:btd_device_unref() 0x55555581a470: ref=0
+bluetoothd[26579]: src/device.c:device_free() 0x55555581a470
+
+Program received signal SIGSEGV, Segmentation fault.
+gateway_close (device=0x555555820390) at audio/gateway.c:585
+585 if (gw->rfcomm) {
+
+diff -cr bluez-4.99.pan.orig/audio/gateway.c bluez-4.99.pan/audio/gateway.c
+*** bluez-4.99.pan.orig/audio/gateway.c	Wed Oct 17 07:49:14 2012
+--- bluez-4.99.pan/audio/gateway.c	Wed Oct 17 07:54:34 2012
+***************
+*** 73,78 ****
+--- 73,80 ----
+  	GIOChannel *rfcomm;
+  	GIOChannel *sco;
+  	GIOChannel *incoming;
++ 	guint rfcomm_id;
++ 	guint sco_id;
+  	GSList *callbacks;
+  	struct hf_agent *agent;
+  	DBusMessage *msg;
+***************
+*** 256,261 ****
+--- 258,267 ----
+  		return FALSE;
+  
+  	DBG("sco connection is released");
++ 
++ 	g_source_remove(gw->sco_id);
++ 	gw->sco_id = 0;
++ 
+  	g_io_channel_shutdown(gw->sco, TRUE, NULL);
+  	g_io_channel_unref(gw->sco);
+  	gw->sco = NULL;
+***************
+*** 273,287 ****
+  
+  	gw->sco = g_io_channel_ref(chan);
+  
+  	if (err) {
+  		error("sco_connect_cb(): %s", err->message);
+  		gateway_suspend_stream(dev);
+  		return;
+  	}
+  
+- 	g_io_add_watch(gw->sco, G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+- 				(GIOFunc) sco_io_cb, dev);
+- 
+  	change_state(dev, GATEWAY_STATE_PLAYING);
+  	run_connect_cb(dev, NULL);
+  }
+--- 279,293 ----
+  
+  	gw->sco = g_io_channel_ref(chan);
+  
++ 	gw->sco_id = g_io_add_watch(gw->sco, G_IO_ERR | G_IO_HUP | G_IO_NVAL,
++ 						(GIOFunc) sco_io_cb, dev);
++ 
+  	if (err) {
+  		error("sco_connect_cb(): %s", err->message);
+  		gateway_suspend_stream(dev);
+  		return;
+  	}
+  
+  	change_state(dev, GATEWAY_STATE_PLAYING);
+  	run_connect_cb(dev, NULL);
+  }
+***************
+*** 311,318 ****
+  	dbus_error_init(&derr);
+  	if (!dbus_set_error_from_message(&derr, reply)) {
+  		DBG("Agent reply: file descriptor passed successfully");
+! 		g_io_add_watch(gw->rfcomm, G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+! 					(GIOFunc) rfcomm_disconnect_cb, dev);
+  		change_state(dev, GATEWAY_STATE_CONNECTED);
+  		goto done;
+  	}
+--- 317,326 ----
+  	dbus_error_init(&derr);
+  	if (!dbus_set_error_from_message(&derr, reply)) {
+  		DBG("Agent reply: file descriptor passed successfully");
+! 		gw->rfcomm_id = g_io_add_watch(gw->rfcomm,
+! 						G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+! 						(GIOFunc) rfcomm_disconnect_cb,
+! 						dev);
+  		change_state(dev, GATEWAY_STATE_CONNECTED);
+  		goto done;
+  	}
+***************
+*** 591,596 ****
+--- 599,614 ----
+  	struct gateway *gw = device->gateway;
+  	int sock;
+  
++ 	if (gw->rfcomm_id != 0) {
++ 		g_source_remove(gw->rfcomm_id);
++ 		gw->rfcomm_id = 0;
++ 	}
++ 
++ 	if (gw->sco_id != 0) {
++ 		g_source_remove(gw->sco_id);
++ 		gw->sco_id = 0;
++ 	}
++ 
+  	if (gw->rfcomm) {
+  		sock = g_io_channel_unix_get_fd(gw->rfcomm);
+  		shutdown(sock, SHUT_RDWR);
+***************
+*** 835,841 ****
+  
+  	gw->sco = g_io_channel_ref(io);
+  
+! 	g_io_add_watch(gw->sco, G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+  						(GIOFunc) sco_io_cb, dev);
+  
+  	change_state(dev, GATEWAY_STATE_PLAYING);
+--- 853,859 ----
+  
+  	gw->sco = g_io_channel_ref(io);
+  
+! 	gw->sco_id = g_io_add_watch(gw->sco, G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+  						(GIOFunc) sco_io_cb, dev);
+  
+  	change_state(dev, GATEWAY_STATE_PLAYING);
+***************
+*** 953,958 ****
+--- 971,979 ----
+  	if (!gw || !gw->sco)
+  		return;
+  
++ 	g_source_remove(gw->sco_id);
++ 	gw->sco_id = 0;
++ 
+  	g_io_channel_shutdown(gw->sco, TRUE, NULL);
+  	g_io_channel_unref(gw->sco);
+  	gw->sco = NULL;

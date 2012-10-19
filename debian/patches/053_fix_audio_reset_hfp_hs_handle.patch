@@ -1,0 +1,30 @@
+author	Jaganath Kanakkassery <jaganath.k@samsung.com>
+commit	2aa45c5fc5c7b12edc38417b99dfec1ebe929837
+	Wed, 2 May 2012 11:40:32 +0000 (14:40 +0300)
+
+audio: Reset hfp and hs handle before connection
+
+When bluez initiates headset connection  hfp and hs handle is saved
+each time when initiating connection. So at some point if hf service
+is removed in remote headset then bluez connects to hs service. But
+because of previously stored hfp handle bluez thinks that connection
+made to hs service is hfp connection and waits for at commands.
+Eventually bluez connection state will be incorrectly set.
+
+diff -cr bluez-4.99.pan.orig/audio/headset.c bluez-4.99.pan/audio/headset.c
+*** bluez-4.99.pan.orig/audio/headset.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/audio/headset.c	Mon Oct 15 05:38:15 2012
+***************
+*** 1465,1473 ****
+--- 1465,1475 ----
+  
+  	if (svc == HANDSFREE_SVCLASS_ID) {
+  		headset->hfp_handle = record->handle;
++ 		headset->hsp_handle = 0;
+  		DBG("Discovered Handsfree service on channel %d", ch);
+  	} else {
+  		headset->hsp_handle = record->handle;
++ 		headset->hfp_handle = 0;
+  		DBG("Discovered Headset service on channel %d", ch);
+  	}
+  

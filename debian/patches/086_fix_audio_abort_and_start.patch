@@ -1,0 +1,232 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	2b3bf7b241b3c9eff4dcade1f574096b3e60d3c9
+	Fri, 15 Jun 2012 14:50:14 +0000 (17:50 +0300)
+
+AVDTP: Do not respond ABORT command with invalid id
+
+AVDTP spec, 8.15.2 Abort Response:
+
+  "If an AVDTP_ABORT_CMD contains an invalid SEID, no response shall be
+  sent."
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	a59e82103a2b47c5d8039a0c85394c52d07a4252
+	Fri, 15 Jun 2012 14:50:23 +0000 (17:50 +0300)
+
+AVDTP: Fix responding to ABORT with reject
+
+ABORT command cannot be rejected
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	83630251beb6dbd50dd171a9d9040356bf9bc577
+	Fri, 15 Jun 2012 14:50:58 +0000 (17:50 +0300)
+
+audio: Fix aborting A2DP setup while AVDTP Start is in progress
+
+Change return of avdtp_start to -EINPROGRESS so the caller can check if
+the operation is in progress and don't abort because of that.
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	83630251beb6dbd50dd171a9d9040356bf9bc577
+	Fri, 15 Jun 2012 14:50:58 +0000 (17:50 +0300)
+
+audio: Fix aborting A2DP setup while AVDTP Start is in progress
+
+Change return of avdtp_start to -EINPROGRESS so the caller can check if
+the operation is in progress and don't abort because of that.
+
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	9d2f3c94d66fc50b0ba948db04a78ab697d6edd1
+	Mon, 18 Jun 2012 08:40:37 +0000 (11:40 +0300)
+
+AVDTP: Fix rejecting AVDTP Start if starting flag is set
+
+This is now handled by checking if the command collided.
+
+diff -cr bluez-4.99.pan.orig/audio/a2dp.c bluez-4.99.pan/audio/a2dp.c
+*** bluez-4.99.pan.orig/audio/a2dp.c	Tue Oct 16 09:02:07 2012
+--- bluez-4.99.pan/audio/a2dp.c	Tue Oct 16 09:04:10 2012
+***************
+*** 1039,1045 ****
+  		return TRUE;
+  
+  	start_err = avdtp_start(session, a2dp_sep->stream);
+! 	if (start_err < 0) {
+  		error("avdtp_start: %s (%d)", strerror(-start_err),
+  								-start_err);
+  		finalize_setup_errno(setup, start_err, finalize_resume);
+--- 1039,1045 ----
+  		return TRUE;
+  
+  	start_err = avdtp_start(session, a2dp_sep->stream);
+! 	if (start_err < 0 && start_err != -EINPROGRESS) {
+  		error("avdtp_start: %s (%d)", strerror(-start_err),
+  								-start_err);
+  		finalize_setup_errno(setup, start_err, finalize_resume);
+***************
+*** 1087,1093 ****
+  	}
+  
+  	start_err = avdtp_start(session, a2dp_sep->stream);
+! 	if (start_err < 0) {
+  		error("avdtp_start %s (%d)", strerror(-start_err), -start_err);
+  		finalize_setup_errno(setup, start_err, finalize_suspend, NULL);
+  	}
+--- 1087,1093 ----
+  	}
+  
+  	start_err = avdtp_start(session, a2dp_sep->stream);
+! 	if (start_err < 0 && start_err != -EINPROGRESS) {
+  		error("avdtp_start %s (%d)", strerror(-start_err), -start_err);
+  		finalize_setup_errno(setup, start_err, finalize_suspend, NULL);
+  	}
+***************
+*** 1177,1183 ****
+  		g_timeout_add(RECONFIGURE_TIMEOUT, a2dp_reconfigure, setup);
+  }
+  
+! static gboolean abort_ind(struct avdtp *session, struct avdtp_local_sep *sep,
+  				struct avdtp_stream *stream, uint8_t *err,
+  				void *user_data)
+  {
+--- 1177,1183 ----
+  		g_timeout_add(RECONFIGURE_TIMEOUT, a2dp_reconfigure, setup);
+  }
+  
+! static void abort_ind(struct avdtp *session, struct avdtp_local_sep *sep,
+  				struct avdtp_stream *stream, uint8_t *err,
+  				void *user_data)
+  {
+***************
+*** 1193,1205 ****
+  
+  	setup = find_setup_by_session(session);
+  	if (!setup)
+! 		return TRUE;
+  
+  	finalize_setup_errno(setup, -ECONNRESET, finalize_suspend,
+  							finalize_resume,
+  							finalize_config);
+  
+! 	return TRUE;
+  }
+  
+  static void abort_cfm(struct avdtp *session, struct avdtp_local_sep *sep,
+--- 1193,1205 ----
+  
+  	setup = find_setup_by_session(session);
+  	if (!setup)
+! 		return;
+  
+  	finalize_setup_errno(setup, -ECONNRESET, finalize_suspend,
+  							finalize_resume,
+  							finalize_config);
+  
+! 	return;
+  }
+  
+  static void abort_cfm(struct avdtp *session, struct avdtp_local_sep *sep,
+diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
+*** bluez-4.99.pan.orig/audio/avdtp.c	Tue Oct 16 08:16:12 2012
+--- bluez-4.99.pan/audio/avdtp.c	Tue Oct 16 08:22:46 2012
+***************
+*** 1795,1803 ****
+  
+  		stream = sep->stream;
+  
+! 		/* Also reject start cmd if we already initiated start */
+! 		if (sep->state != AVDTP_STATE_OPEN ||
+! 						stream->starting == TRUE) {
+  			err = AVDTP_BAD_STATE;
+  			goto failed;
+  		}
+--- 1795,1802 ----
+  
+  		stream = sep->stream;
+  
+! 		/* Also reject start cmd if state is not open */
+! 		if (sep->state != AVDTP_STATE_OPEN) {
+  			err = AVDTP_BAD_STATE;
+  			goto failed;
+  		}
+***************
+*** 1948,1963 ****
+  	}
+  
+  	sep = find_local_sep_by_seid(session->server, req->acp_seid);
+! 	if (!sep || !sep->stream) {
+! 		err = AVDTP_BAD_ACP_SEID;
+! 		goto failed;
+! 	}
+  
+! 	if (sep->ind && sep->ind->abort) {
+! 		if (!sep->ind->abort(session, sep, sep->stream, &err,
+! 					sep->user_data))
+! 			goto failed;
+! 	}
+  
+  	avdtp_check_collision(session, AVDTP_ABORT, sep->stream);
+  
+--- 1947,1958 ----
+  	}
+  
+  	sep = find_local_sep_by_seid(session->server, req->acp_seid);
+! 	if (!sep || !sep->stream)
+! 		return TRUE;
+  
+! 	if (sep->ind && sep->ind->abort)
+! 		sep->ind->abort(session, sep, sep->stream, &err,
+! 					sep->user_data);
+  
+  	avdtp_check_collision(session, AVDTP_ABORT, sep->stream);
+  
+***************
+*** 1967,1976 ****
+  		avdtp_sep_set_state(session, sep, AVDTP_STATE_ABORTING);
+  
+  	return ret;
+- 
+- failed:
+- 	return avdtp_send(session, transaction, AVDTP_MSG_TYPE_REJECT,
+- 					AVDTP_ABORT, &err, sizeof(err));
+  }
+  
+  static gboolean avdtp_secctl_cmd(struct avdtp *session, uint8_t transaction,
+--- 1962,1967 ----
+***************
+*** 3683,3689 ****
+  
+  	if (stream->starting == TRUE) {
+  		DBG("stream already started");
+! 		return -EINVAL;
+  	}
+  
+  	memset(&req, 0, sizeof(req));
+--- 3674,3680 ----
+  
+  	if (stream->starting == TRUE) {
+  		DBG("stream already started");
+! 		return -EINPROGRESS;
+  	}
+  
+  	memset(&req, 0, sizeof(req));
+diff -cr bluez-4.99.pan.orig/audio/avdtp.h bluez-4.99.pan/audio/avdtp.h
+*** bluez-4.99.pan.orig/audio/avdtp.h	Sun Feb 13 15:40:34 2011
+--- bluez-4.99.pan/audio/avdtp.h	Tue Oct 16 08:26:05 2012
+***************
+*** 198,204 ****
+  	gboolean (*close) (struct avdtp *session, struct avdtp_local_sep *sep,
+  				struct avdtp_stream *stream, uint8_t *err,
+  				void *user_data);
+! 	gboolean (*abort) (struct avdtp *session, struct avdtp_local_sep *sep,
+  				struct avdtp_stream *stream, uint8_t *err,
+  				void *user_data);
+  	gboolean (*reconfigure) (struct avdtp *session,
+--- 198,204 ----
+  	gboolean (*close) (struct avdtp *session, struct avdtp_local_sep *sep,
+  				struct avdtp_stream *stream, uint8_t *err,
+  				void *user_data);
+! 	void (*abort) (struct avdtp *session, struct avdtp_local_sep *sep,
+  				struct avdtp_stream *stream, uint8_t *err,
+  				void *user_data);
+  	gboolean (*reconfigure) (struct avdtp *session,

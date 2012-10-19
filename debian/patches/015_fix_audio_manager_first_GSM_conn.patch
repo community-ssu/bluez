@@ -1,0 +1,36 @@
+author	Arnaud Mouiche <arnaud.mouiche@invoxia.com>
+commit	4fd2d5ae389d9e2f4549ef9962c7a12eb35bfe36
+	Thu, 15 Mar 2012 08:22:10 +0000 (08:22 +0000)
+
+HFP gateway: fix failure on very first GSM connection
+
+This patch fix the very first incoming connection from a GSM device
+(playing the gateway role), when 'device->gateway' is NULL (when we
+didn't perform a SDP browse request yet)
+
+we add the service with 'btd_device_add_uuid(device->btd_dev,
+remote_uuid)' but we provide HFP_HS_UUID as remote_uuid. Consequently,
+the HFP headset service is activated instead the gateway service.
+
+diff -cr bluez-4.99.pan.orig/audio/manager.c bluez-4.99.pan/audio/manager.c
+*** bluez-4.99.pan.orig/audio/manager.c	Fri Oct 12 07:47:56 2012
+--- bluez-4.99.pan/audio/manager.c	Fri Oct 12 08:01:08 2012
+***************
+*** 578,585 ****
+  		return;
+  	}
+  
+! 	server_uuid = HFP_AG_UUID;
+! 	remote_uuid = HFP_HS_UUID;
+  
+  	device = manager_get_device(&src, &dst, TRUE);
+  	if (!device)
+--- 578,585 ----
+  		return;
+  	}
+  
+! 	server_uuid = HFP_HS_UUID;
+! 	remote_uuid = HFP_AG_UUID;
+  
+  	device = manager_get_device(&src, &dst, TRUE);
+  	if (!device)

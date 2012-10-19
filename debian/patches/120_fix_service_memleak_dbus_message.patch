@@ -1,0 +1,49 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	e39fc90979ad3c6e1ec5fdc3e96e714fc2004905
+	Fri, 21 Sep 2012 12:06:34 +0000 (15:06 +0300)
+
+service: Fix DBusMessage leak
+
+diff -cr bluez-4.99.pan.orig/plugins/service.c bluez-4.99.pan/plugins/service.c
+*** bluez-4.99.pan.orig/plugins/service.c	Tue Oct 16 17:45:22 2012
+--- bluez-4.99.pan/plugins/service.c	Wed Oct 17 06:03:35 2012
+***************
+*** 536,554 ****
+  		error("Access denied: %s", derr->message);
+  
+  		reply = btd_error_not_authorized(auth->msg);
+- 		dbus_message_unref(auth->msg);
+  		g_dbus_send_message(auth->conn, reply);
+  		goto done;
+  	}
+  
+! 	g_dbus_send_reply(auth->conn, auth->msg,
+! 			DBUS_TYPE_INVALID);
+  
+  done:
+  	dbus_connection_unref(auth->conn);
+  
+  	serv_adapter->pending_list = g_slist_remove(serv_adapter->pending_list,
+  									auth);
+  	g_free(auth);
+  
+  	auth = next_pending(serv_adapter);
+--- 536,553 ----
+  		error("Access denied: %s", derr->message);
+  
+  		reply = btd_error_not_authorized(auth->msg);
+  		g_dbus_send_message(auth->conn, reply);
+  		goto done;
+  	}
+  
+! 	g_dbus_send_reply(auth->conn, auth->msg, DBUS_TYPE_INVALID);
+  
+  done:
+  	dbus_connection_unref(auth->conn);
+  
+  	serv_adapter->pending_list = g_slist_remove(serv_adapter->pending_list,
+  									auth);
++ 	dbus_message_unref(auth->msg);
+  	g_free(auth);
+  
+  	auth = next_pending(serv_adapter);

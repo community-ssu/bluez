@@ -1,0 +1,26 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	773b25a93057bd13e190e8fe2ea0505f3d2389e1
+	Tue, 2 Oct 2012 18:50:42 +0000 (21:50 +0300)
+
+audio: Fix missing gateway state check on Connect
+
+If the gateway is already connected (or connecting) when Connect() is
+called, an error should be returned, exactly as other interfaces do.
+
+diff -cr bluez-4.99.pan.orig/audio/gateway.c bluez-4.99.pan/audio/gateway.c
+*** bluez-4.99.pan.orig/audio/gateway.c	Tue Oct 16 18:25:52 2012
+--- bluez-4.99.pan/audio/gateway.c	Wed Oct 17 07:11:42 2012
+***************
+*** 552,557 ****
+--- 552,562 ----
+  	struct gateway *gw = au_dev->gateway;
+  	int err;
+  
++ 	if (gw->state == GATEWAY_STATE_CONNECTING)
++ 		return btd_error_in_progress(msg);
++ 	else if (gw->state > GATEWAY_STATE_CONNECTING)
++ 		return btd_error_already_connected(msg);
++ 
+  	if (!gw->agent)
+  		return btd_error_agent_not_available(msg);
+  

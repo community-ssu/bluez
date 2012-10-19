@@ -1,0 +1,47 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	5d143ba35e1af7cc090f1c8c53fa4957efd258e2
+	Tue, 4 Sep 2012 12:50:44 +0000 (15:50 +0300)
+
+audio: Fix gateway in connecting state forever
+
+If bt_search_service() fails the state should be left unchanged.
+Otherwise the gateway state is set forever to GATEWAY_STATE_CONNECTING.
+
+This issue can be easily reproduced if a connection attempt is done
+very soon after startup.
+
+diff -cr bluez-4.99.pan.orig/audio/gateway.c bluez-4.99.pan/audio/gateway.c
+*** bluez-4.99.pan.orig/audio/gateway.c	Tue Oct 16 15:46:41 2012
+--- bluez-4.99.pan/audio/gateway.c	Tue Oct 16 18:21:18 2012
+***************
+*** 531,541 ****
+  static int get_records(struct audio_device *device)
+  {
+  	uuid_t uuid;
+  
+- 	change_state(device, GATEWAY_STATE_CONNECTING);
+  	sdp_uuid16_create(&uuid, HANDSFREE_AGW_SVCLASS_ID);
+! 	return bt_search_service(&device->src, &device->dst, &uuid,
+  				get_record_cb, device, NULL);
+  }
+  
+  static DBusMessage *ag_connect(DBusConnection *conn, DBusMessage *msg,
+--- 531,548 ----
+  static int get_records(struct audio_device *device)
+  {
+  	uuid_t uuid;
++ 	int err;
+  
+  	sdp_uuid16_create(&uuid, HANDSFREE_AGW_SVCLASS_ID);
+! 
+! 	err = bt_search_service(&device->src, &device->dst, &uuid,
+  				get_record_cb, device, NULL);
++ 	if (err < 0)
++ 		return err;
++ 
++ 	change_state(device, GATEWAY_STATE_CONNECTING);
++ 
++ 	return 0;
+  }
+  
+  static DBusMessage *ag_connect(DBusConnection *conn, DBusMessage *msg,

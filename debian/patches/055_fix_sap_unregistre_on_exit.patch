@@ -1,0 +1,23 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	69fd49d6febd0666a7193faa9cae04c455e945ff
+	Thu, 3 May 2012 20:29:27 +0000 (23:29 +0300)
+
+SAP: Fix not unregistering dummy interface on exit
+
+Dummy interface is registered on plugin init and is never unregistered
+
+diff -cr bluez-4.99.pan.orig/sap/sap-dummy.c bluez-4.99.pan/sap/sap-dummy.c
+*** bluez-4.99.pan.orig/sap/sap-dummy.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/sap/sap-dummy.c	Mon Oct 15 05:43:46 2012
+***************
+*** 340,345 ****
+--- 340,348 ----
+  
+  void sap_exit(void)
+  {
++ 	g_dbus_unregister_interface(connection, SAP_DUMMY_PATH,
++ 							SAP_DUMMY_IFACE);
++ 
+  	dbus_connection_unref(connection);
+  	connection = NULL;
+  }

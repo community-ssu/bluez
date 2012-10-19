@@ -1,0 +1,44 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	5232f762143bcd340c97826ca1212c4d5b07575a
+	Wed, 6 Jun 2012 06:02:23 +0000 (09:02 +0300)
+
+attrib: Fix always requiring high security
+
+If we get an insufficient encryption error for ATT it doesn't
+necessarily mean that we need to have high secirity. If we have an
+unauthenticated key and are unencrypted it could also mean that we just
+need to encrypt the link (medium security). Always requiring high
+security would make the connection fail for unauthenticated keys.
+
+diff -cr bluez-4.99.pan.orig/attrib/client.c bluez-4.99.pan/attrib/client.c
+*** bluez-4.99.pan.orig/attrib/client.c	Mon Oct 15 10:04:58 2012
+--- bluez-4.99.pan/attrib/client.c	Mon Oct 15 10:06:53 2012
+***************
+*** 672,680 ****
+  				(void *) chr->desc, len);
+  	} else if (status == ATT_ECODE_INSUFF_ENC) {
+  		GIOChannel *io = g_attrib_get_channel(gatt->attrib);
+  
+  		if (bt_io_set(io, BT_IO_L2CAP, NULL,
+! 				BT_IO_OPT_SEC_LEVEL, BT_IO_SEC_HIGH,
+  				BT_IO_OPT_INVALID)) {
+  			gatt_read_char(gatt->attrib, current->handle, 0,
+  					update_char_desc, current);
+--- 672,688 ----
+  				(void *) chr->desc, len);
+  	} else if (status == ATT_ECODE_INSUFF_ENC) {
+  		GIOChannel *io = g_attrib_get_channel(gatt->attrib);
++ 		BtIOSecLevel level = BT_IO_SEC_HIGH;
++ 
++ 		bt_io_get(io, BT_IO_L2CAP, NULL,
++ 				BT_IO_OPT_SEC_LEVEL, &level,
++ 				BT_IO_OPT_INVALID);
++ 
++ 		if (level < BT_IO_SEC_HIGH)
++ 			level++;
+  
+  		if (bt_io_set(io, BT_IO_L2CAP, NULL,
+! 				BT_IO_OPT_SEC_LEVEL, level,
+  				BT_IO_OPT_INVALID)) {
+  			gatt_read_char(gatt->attrib, current->handle, 0,
+  					update_char_desc, current);

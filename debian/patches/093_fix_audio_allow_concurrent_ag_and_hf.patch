@@ -1,0 +1,62 @@
+author	Frédéric Dalleau <frederic.dalleau@linux.intel.co
+commit	2f92669697152848f2fae584d45fde5d80ea6eb8
+	Thu, 28 Jun 2012 10:06:57 +0000 (13:06 +0300)
+
+audio: Permit concurrent use of AG and HF roles
+
+If a device supports both HF and AG roles, then if a SCO connection
+related to AG profile happens, the connection is rejected because HF is
+not connected. One consequence is pulseaudio failing to load bluetooth
+module.
+
+diff -cr bluez-4.99.pan.orig/audio/main.c bluez-4.99.pan/audio/main.c
+*** bluez-4.99.pan.orig/audio/main.c	Wed Dec 21 17:53:54 2011
+--- bluez-4.99.pan/audio/main.c	Tue Oct 16 15:04:13 2012
+***************
+*** 102,108 ****
+  	if (device->headset) {
+  		if (headset_get_state(device) < HEADSET_STATE_CONNECTED) {
+  			DBG("Refusing SCO from non-connected headset");
+! 			goto drop;
+  		}
+  
+  		if (!headset_get_hfp_active(device)) {
+--- 102,108 ----
+  	if (device->headset) {
+  		if (headset_get_state(device) < HEADSET_STATE_CONNECTED) {
+  			DBG("Refusing SCO from non-connected headset");
+! 			goto gateway;
+  		}
+  
+  		if (!headset_get_hfp_active(device)) {
+***************
+*** 115,121 ****
+  			goto drop;
+  
+  		headset_set_state(device, HEADSET_STATE_PLAYING);
+! 	} else if (device->gateway) {
+  		if (!gateway_is_connected(device)) {
+  			DBG("Refusing SCO from non-connected AG");
+  			goto drop;
+--- 115,125 ----
+  			goto drop;
+  
+  		headset_set_state(device, HEADSET_STATE_PLAYING);
+! 		goto connect;
+! 	}
+! 
+! gateway:
+! 	if (device->gateway) {
+  		if (!gateway_is_connected(device)) {
+  			DBG("Refusing SCO from non-connected AG");
+  			goto drop;
+***************
+*** 126,131 ****
+--- 130,136 ----
+  	} else
+  		goto drop;
+  
++ connect:
+  	sk = g_io_channel_unix_get_fd(chan);
+  	fcntl(sk, F_SETFL, 0);
+  

@@ -1,0 +1,295 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	e2f915b21efbd39b0cb690d6304c23a8c4eb6254
+	Wed, 28 Mar 2012 10:15:02 +0000 (13:15 +0300)
+
+Parse config DeviceID string on bluetoothd startup
+
+Instead of parsing config DeviceID string on sdp server startup, parse
+it in main while reading config file. This allow to store logical DID
+values in main_opts (instead of raw config string) and make use of them
+in bluetoothd code.
+
+diff -cr bluez-4.99.pan.orig/src/hcid.h bluez-4.99.pan/src/hcid.h
+*** bluez-4.99.pan.orig/src/hcid.h	Wed Jan 11 17:44:59 2012
+--- bluez-4.99.pan/src/hcid.h	Fri Oct 12 08:58:07 2012
+***************
+*** 42,48 ****
+  
+  	uint8_t		mode;
+  	uint8_t		discov_interval;
+! 	char		deviceid[15]; /* FIXME: */
+  };
+  
+  enum {
+--- 42,52 ----
+  
+  	uint8_t		mode;
+  	uint8_t		discov_interval;
+! 
+! 	uint16_t	did_source;
+! 	uint16_t	did_vendor;
+! 	uint16_t	did_product;
+! 	uint16_t	did_version;
+  };
+  
+  enum {
+diff -cr bluez-4.99.pan.orig/src/main.c bluez-4.99.pan/src/main.c
+*** bluez-4.99.pan.orig/src/main.c	Wed Jan 11 17:44:59 2012
+--- bluez-4.99.pan/src/main.c	Fri Oct 12 08:51:47 2012
+***************
+*** 87,92 ****
+--- 87,107 ----
+  	return keyfile;
+  }
+  
++ static void parse_did(const char *did)
++ {
++ 	int result;
++ 	uint16_t vendor, product, version = 0x0000; /* version is optional */
++ 
++ 	result = sscanf(did, "%4hx:%4hx:%4hx", &vendor, &product, &version);
++ 	if (result == EOF || result < 2)
++ 		return;
++ 
++ 	main_opts.did_source = 0x0002;
++ 	main_opts.did_vendor = vendor;
++ 	main_opts.did_product = product;
++ 	main_opts.did_version = version;
++ }
++ 
+  static void parse_config(GKeyFile *config)
+  {
+  	GError *err = NULL;
+***************
+*** 195,202 ****
+  		g_clear_error(&err);
+  	} else {
+  		DBG("deviceid=%s", str);
+! 		strncpy(main_opts.deviceid, str,
+! 					sizeof(main_opts.deviceid) - 1);
+  		g_free(str);
+  	}
+  
+--- 210,216 ----
+  		g_clear_error(&err);
+  	} else {
+  		DBG("deviceid=%s", str);
+! 		parse_did(str);
+  		g_free(str);
+  	}
+  
+***************
+*** 519,525 ****
+  		}
+  	}
+  
+! 	start_sdp_server(mtu, main_opts.deviceid, SDP_SERVER_COMPAT);
+  
+  	/* Loading plugins has to be done after D-Bus has been setup since
+  	 * the plugins might wanna expose some paths on the bus. However the
+--- 533,539 ----
+  		}
+  	}
+  
+! 	start_sdp_server(mtu, SDP_SERVER_COMPAT);
+  
+  	/* Loading plugins has to be done after D-Bus has been setup since
+  	 * the plugins might wanna expose some paths on the bus. However the
+diff -cr bluez-4.99.pan.orig/src/sdpd-server.c bluez-4.99.pan/src/sdpd-server.c
+*** bluez-4.99.pan.orig/src/sdpd-server.c	Tue Dec 28 11:47:33 2010
+--- bluez-4.99.pan/src/sdpd-server.c	Fri Oct 12 08:53:12 2012
+***************
+*** 45,50 ****
+--- 45,51 ----
+  
+  #include <glib.h>
+  
++ #include "hcid.h"
+  #include "log.h"
+  #include "sdpd.h"
+  
+***************
+*** 227,233 ****
+  	return TRUE;
+  }
+  
+! int start_sdp_server(uint16_t mtu, const char *did, uint32_t flags)
+  {
+  	int compat = flags & SDP_SERVER_COMPAT;
+  	int master = flags & SDP_SERVER_MASTER;
+--- 228,234 ----
+  	return TRUE;
+  }
+  
+! int start_sdp_server(uint16_t mtu, uint32_t flags)
+  {
+  	int compat = flags & SDP_SERVER_COMPAT;
+  	int master = flags & SDP_SERVER_MASTER;
+***************
+*** 240,259 ****
+  		return -1;
+  	}
+  
+! 	if (did && strlen(did) > 0) {
+! 		const char *ptr = did;
+! 		uint16_t vid = 0x0000, pid = 0x0000, ver = 0x0000;
+! 
+! 		vid = (uint16_t) strtol(ptr, NULL, 16);
+! 		ptr = strchr(ptr, ':');
+! 		if (ptr) {
+! 			pid = (uint16_t) strtol(ptr + 1, NULL, 16);
+! 			ptr = strchr(ptr + 1, ':');
+! 			if (ptr)
+! 				ver = (uint16_t) strtol(ptr + 1, NULL, 16);
+! 			register_device_id(vid, pid, ver);
+! 		}
+! 	}
+  
+  	io = g_io_channel_unix_new(l2cap_sock);
+  	g_io_channel_set_close_on_unref(io, TRUE);
+--- 241,248 ----
+  		return -1;
+  	}
+  
+! 	if (main_opts.did_source > 0)
+! 		register_device_id();
+  
+  	io = g_io_channel_unix_new(l2cap_sock);
+  	g_io_channel_set_close_on_unref(io, TRUE);
+diff -cr bluez-4.99.pan.orig/src/sdpd-service.c bluez-4.99.pan/src/sdpd-service.c
+*** bluez-4.99.pan.orig/src/sdpd-service.c	Mon May 30 22:39:53 2011
+--- bluez-4.99.pan/src/sdpd-service.c	Fri Oct 12 08:56:17 2012
+***************
+*** 44,49 ****
+--- 44,50 ----
+  #include <glib.h>
+  #include <dbus/dbus.h>
+  
++ #include "hcid.h"
+  #include "sdpd.h"
+  #include "log.h"
+  #include "adapter.h"
+***************
+*** 172,181 ****
+  	update_db_timestamp();
+  }
+  
+! void register_device_id(const uint16_t vendor, const uint16_t product,
+! 						const uint16_t version)
+  {
+! 	const uint16_t spec = 0x0102, source = 0x0002;
+  	const uint8_t primary = 1;
+  	sdp_list_t *class_list, *group_list, *profile_list;
+  	uuid_t class_uuid, group_uuid;
+--- 173,181 ----
+  	update_db_timestamp();
+  }
+  
+! void register_device_id(void)
+  {
+! 	const uint16_t spec = 0x0102;
+  	const uint8_t primary = 1;
+  	sdp_list_t *class_list, *group_list, *profile_list;
+  	uuid_t class_uuid, group_uuid;
+***************
+*** 184,192 ****
+  	sdp_profile_desc_t profile;
+  	sdp_record_t *record = sdp_record_alloc();
+  
+! 	info("Adding device id record for %04x:%04x", vendor, product);
+  
+! 	btd_manager_set_did(vendor, product, version);
+  
+  	record->handle = sdp_next_handle();
+  
+--- 184,194 ----
+  	sdp_profile_desc_t profile;
+  	sdp_record_t *record = sdp_record_alloc();
+  
+! 	info("Adding device id record for %04x:%04x:%04x", main_opts.did_vendor,
+! 				main_opts.did_product, main_opts.did_version);
+  
+! 	btd_manager_set_did(main_opts.did_vendor, main_opts.did_product,
+! 							main_opts.did_version);
+  
+  	record->handle = sdp_next_handle();
+  
+***************
+*** 213,231 ****
+  	spec_data = sdp_data_alloc(SDP_UINT16, &spec);
+  	sdp_attr_add(record, 0x0200, spec_data);
+  
+! 	vendor_data = sdp_data_alloc(SDP_UINT16, &vendor);
+  	sdp_attr_add(record, 0x0201, vendor_data);
+  
+! 	product_data = sdp_data_alloc(SDP_UINT16, &product);
+  	sdp_attr_add(record, 0x0202, product_data);
+  
+! 	version_data = sdp_data_alloc(SDP_UINT16, &version);
+  	sdp_attr_add(record, 0x0203, version_data);
+  
+  	primary_data = sdp_data_alloc(SDP_BOOL, &primary);
+  	sdp_attr_add(record, 0x0204, primary_data);
+  
+! 	source_data = sdp_data_alloc(SDP_UINT16, &source);
+  	sdp_attr_add(record, 0x0205, source_data);
+  
+  	update_db_timestamp();
+--- 215,233 ----
+  	spec_data = sdp_data_alloc(SDP_UINT16, &spec);
+  	sdp_attr_add(record, 0x0200, spec_data);
+  
+! 	vendor_data = sdp_data_alloc(SDP_UINT16, &main_opts.did_vendor);
+  	sdp_attr_add(record, 0x0201, vendor_data);
+  
+! 	product_data = sdp_data_alloc(SDP_UINT16, &main_opts.did_product);
+  	sdp_attr_add(record, 0x0202, product_data);
+  
+! 	version_data = sdp_data_alloc(SDP_UINT16, &main_opts.did_version);
+  	sdp_attr_add(record, 0x0203, version_data);
+  
+  	primary_data = sdp_data_alloc(SDP_BOOL, &primary);
+  	sdp_attr_add(record, 0x0204, primary_data);
+  
+! 	source_data = sdp_data_alloc(SDP_UINT16, &main_opts.did_source);
+  	sdp_attr_add(record, 0x0205, source_data);
+  
+  	update_db_timestamp();
+diff -cr bluez-4.99.pan.orig/src/sdpd.h bluez-4.99.pan/src/sdpd.h
+*** bluez-4.99.pan.orig/src/sdpd.h	Mon May 30 22:39:53 2011
+--- bluez-4.99.pan/src/sdpd.h	Fri Oct 12 08:57:06 2012
+***************
+*** 53,60 ****
+  
+  void register_public_browse_group(void);
+  void register_server_service(void);
+! void register_device_id(const uint16_t vendor, const uint16_t product,
+! 						const uint16_t version);
+  
+  int record_sort(const void *r1, const void *r2);
+  void sdp_svcdb_reset(void);
+--- 53,59 ----
+  
+  void register_public_browse_group(void);
+  void register_server_service(void);
+! void register_device_id(void);
+  
+  int record_sort(const void *r1, const void *r2);
+  void sdp_svcdb_reset(void);
+***************
+*** 74,80 ****
+  #define SDP_SERVER_COMPAT (1 << 0)
+  #define SDP_SERVER_MASTER (1 << 1)
+  
+! int start_sdp_server(uint16_t mtu, const char *did, uint32_t flags);
+  void stop_sdp_server(void);
+  
+  int add_record_to_server(const bdaddr_t *src, sdp_record_t *rec);
+--- 73,79 ----
+  #define SDP_SERVER_COMPAT (1 << 0)
+  #define SDP_SERVER_MASTER (1 << 1)
+  
+! int start_sdp_server(uint16_t mtu, uint32_t flags);
+  void stop_sdp_server(void);
+  
+  int add_record_to_server(const bdaddr_t *src, sdp_record_t *rec);

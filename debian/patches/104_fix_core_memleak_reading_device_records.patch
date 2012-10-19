@@ -1,0 +1,38 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	7a7c5e3032aad9ad3bfa73fef9bf6b883bb73992
+	Thu, 9 Aug 2012 13:04:34 +0000 (16:04 +0300)
+
+core: Fix memory leak while reading device records
+
+btd_device_get_record does not free the current list of records when
+reloading it from the storage:
+
+   at 0x4A0884D: malloc (vg_replace_malloc.c:263)
+   by 0x18EB85: sdp_list_append (sdp.c:1749)
+   by 0x172798: create_stored_records_from_keys (storage.c:930)
+   by 0x16FA73: textfile_foreach (textfile.c:475)
+   by 0x1729C8: read_records (storage.c:966)
+   by 0x17E439: btd_device_get_record (device.c:2991)
+   by 0x17E4DC: device_services_from_record (device.c:1586)
+   by 0x17677B: create_stored_device_from_profiles (adapter.c:1702)
+   by 0x16FA73: textfile_foreach (textfile.c:475)
+   by 0x1762BC: load_devices (adapter.c:1971)
+   by 0x17A409: adapter_init (adapter.c:2422)
+   by 0x175650: btd_manager_register_adapter (manager.c:364)
+
+diff -cr bluez-4.99.pan.orig/src/device.c bluez-4.99.pan/src/device.c
+*** bluez-4.99.pan.orig/src/device.c	Mon Oct 15 09:46:36 2012
+--- bluez-4.99.pan/src/device.c	Tue Oct 16 17:20:38 2012
+***************
+*** 2845,2850 ****
+--- 2845,2854 ----
+  		record = find_record_in_list(device->tmp_records, uuid);
+  		if (record != NULL)
+  			return record;
++ 
++ 		sdp_list_free(device->tmp_records,
++ 					(sdp_free_func_t) sdp_record_free);
++ 		device->tmp_records = NULL;
+  	}
+  
+  	adapter_get_address(device->adapter, &src);

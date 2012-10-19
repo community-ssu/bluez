@@ -1,0 +1,93 @@
+author	Lucas De Marchi <lucas.demarchi@profusion.mobi>
+commit	ca0b4c4c658ba61b5a23ed9dde2bebc4558fe032
+	Thu, 28 Jun 2012 07:37:42 +0000 (10:37 +0300)
+
+gdbus: Fix removal of filter after last filter_data
+
+If there's a signal watch that's also watching for name
+(data->name_watch) currently we are trying to remove the message_filter
+twice since we may have the following call chain:
+
+filter_data_remove_callback()
+  filter_data_free()
+    g_dbus_remove_watch()
+      filter_data_remove_callback()
+filter_data_free()
+        dbus_connection_remove_filter()
+  dbus_connection_remove_filter()
+
+Because of this we can't currently watch for signals passing the bus
+name. After this patch we don't have this issue anymore.
+
+We fix it by removing the filter before calling filter_data_free() if we
+are the last filter_data and thus avoid calling
+dbus_connection_remove_filter() twice.
+
+diff -cr bluez-4.99.pan.orig/gdbus/watch.c bluez-4.99.pan/gdbus/watch.c
+*** bluez-4.99.pan.orig/gdbus/watch.c	Mon Oct 15 03:07:01 2012
+--- bluez-4.99.pan/gdbus/watch.c	Tue Oct 16 14:59:22 2012
+***************
+*** 376,390 ****
+  
+  	connection = dbus_connection_ref(data->connection);
+  	listeners = g_slist_remove(listeners, data);
+- 	filter_data_free(data);
+  
+  	/* Remove filter if there are no listeners left for the connection */
+! 	data = filter_data_find(connection, NULL, NULL, NULL, NULL, NULL,
+! 					NULL);
+! 	if (data == NULL)
+  		dbus_connection_remove_filter(connection, message_filter,
+  						NULL);
+  
+  	dbus_connection_unref(connection);
+  
+  	return TRUE;
+--- 376,389 ----
+  
+  	connection = dbus_connection_ref(data->connection);
+  	listeners = g_slist_remove(listeners, data);
+  
+  	/* Remove filter if there are no listeners left for the connection */
+! 	if (filter_data_find(connection, NULL, NULL, NULL, NULL, NULL,
+! 								NULL) == NULL)
+  		dbus_connection_remove_filter(connection, message_filter,
+  						NULL);
+  
++ 	filter_data_free(data);
+  	dbus_connection_unref(connection);
+  
+  	return TRUE;
+***************
+*** 537,551 ****
+  	remove_match(data);
+  
+  	listeners = g_slist_remove(listeners, data);
+- 	filter_data_free(data);
+  
+  	/* Remove filter if there no listener left for the connection */
+! 	data = filter_data_find(connection, NULL, NULL, NULL, NULL, NULL,
+! 					NULL);
+! 	if (data == NULL)
+  		dbus_connection_remove_filter(connection, message_filter,
+  						NULL);
+  
+  	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+  }
+  
+--- 536,550 ----
+  	remove_match(data);
+  
+  	listeners = g_slist_remove(listeners, data);
+  
+  	/* Remove filter if there no listener left for the connection */
+! 	if (filter_data_find(connection, NULL, NULL, NULL, NULL, NULL,
+! 								NULL) == NULL)
+  		dbus_connection_remove_filter(connection, message_filter,
+  						NULL);
+  
++ 	filter_data_free(data);
++ 
+  	return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+  }
+  

@@ -1,0 +1,31 @@
+author	Andrzej Kaczmarek <andrzej.kaczmarek@tieto.com>
+commit	dbe0ed14d5e12f76408e6f7f91ce6d3944fd2722
+	Thu, 26 Apr 2012 09:12:18 +0000 (12:12 +0300)
+
+gatttool: Fix handle parsing in cmd_char_write()
+
+errno is not set to 0 before call to strtoll() so cmd_char_write() can fail
+even with proper data. Use strtohandle() helper function instead.
+
+diff -cr bluez-4.99.pan.orig/attrib/interactive.c bluez-4.99.pan/attrib/interactive.c
+*** bluez-4.99.pan.orig/attrib/interactive.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/attrib/interactive.c	Mon Oct 15 05:29:15 2012
+***************
+*** 586,593 ****
+  		return;
+  	}
+  
+! 	handle = strtoll(argvp[1], NULL, 16);
+! 	if (errno != 0 || handle <= 0) {
+  		printf("A valid handle is required\n");
+  		return;
+  	}
+--- 586,593 ----
+  		return;
+  	}
+  
+! 	handle = strtohandle(argvp[1]);
+! 	if (handle <= 0) {
+  		printf("A valid handle is required\n");
+  		return;
+  	}

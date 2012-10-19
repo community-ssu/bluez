@@ -1,0 +1,66 @@
+author	Hemant Gupta <hemant.gupta@stericsson.com>
+commit	1a56e362e4700f1193f2bb9069b413c85d3885bc
+	Tue, 10 Apr 2012 10:28:05 +0000 (13:28 +0300)
+
+mgmtops: Handle Start Discovery Complete in case of failure
+
+This patch adds handling of start discovery complete event in cases
+when discovery fails to get started.
+
+diff -cr bluez-4.99.pan.orig/plugins/mgmtops.c bluez-4.99.pan/plugins/mgmtops.c
+*** bluez-4.99.pan.orig/plugins/mgmtops.c	Mon Mar  5 04:03:57 2012
+--- bluez-4.99.pan/plugins/mgmtops.c	Mon Oct 15 03:53:04 2012
+***************
+*** 1255,1260 ****
+--- 1255,1288 ----
+  		oob_read_local_data_complete(adapter, rp->hash, rp->randomizer);
+  }
+  
++ static void start_discovery_complete(int sk, uint16_t index, uint8_t status,
++ 						void *buf, size_t len)
++ {
++ 	uint8_t *type = buf;
++ 	struct btd_adapter *adapter;
++ 
++ 	if (len != sizeof(*type)) {
++ 		error("start_discovery_complete event size mismatch "
++ 					"(%zu != %zu)", len, sizeof(*type));
++ 		return;
++ 	}
++ 
++ 	DBG("hci%u type %u status %u", index, *type, status);
++ 
++ 	if (index > max_index) {
++ 		error("Invalid index %u in start_discovery_complete", index);
++ 		return;
++ 	}
++ 
++ 	if (!status)
++ 		return;
++ 
++ 	adapter = manager_find_adapter_by_id(index);
++ 	if (adapter)
++ 		/* Start discovery failed, inform upper layers. */
++ 		adapter_set_discovering(adapter, FALSE);
++ }
++ 
+  static void read_local_oob_data_failed(int sk, uint16_t index)
+  {
+  	struct btd_adapter *adapter;
+***************
+*** 1421,1427 ****
+  		DBG("set_fast_connectable complete");
+  		break;
+  	case MGMT_OP_START_DISCOVERY:
+! 		DBG("start_discovery complete");
+  		break;
+  	case MGMT_OP_STOP_DISCOVERY:
+  		DBG("stop_discovery complete");
+--- 1449,1455 ----
+  		DBG("set_fast_connectable complete");
+  		break;
+  	case MGMT_OP_START_DISCOVERY:
+! 		start_discovery_complete(sk, index, ev->status, ev->data, len);
+  		break;
+  	case MGMT_OP_STOP_DISCOVERY:
+  		DBG("stop_discovery complete");

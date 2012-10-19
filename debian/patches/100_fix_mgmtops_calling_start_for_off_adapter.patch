@@ -1,0 +1,38 @@
+author	Vinicius Costa Gomes <vinicius.gomes@openbossa.org>
+commit	eddab0c4259a79314a5f8671b8d52198719d0b85
+	Sat, 7 Jul 2012 09:15:49 +0000 (10:15 +0100)
+
+mgmtops: Fix calling btd_adapter_start() for an off adapter
+
+When the adapter mode is off and the controller is down, we should
+not consider that the adapter is powered up.
+
+diff -cr bluez-4.99.pan.orig/plugins/mgmtops.c bluez-4.99.pan/plugins/mgmtops.c
+*** bluez-4.99.pan.orig/plugins/mgmtops.c	Mon Oct 15 10:36:00 2012
+--- bluez-4.99.pan/plugins/mgmtops.c	Tue Oct 16 16:48:34 2012
+***************
+*** 1099,1109 ****
+  		return;
+  	}
+  
+! 	if (mode != MODE_OFF && !mgmt_powered(info->current_settings))
+! 		mgmt_set_powered(index, TRUE);
+! 	else {
+! 		get_connections(sk, index);
+! 		btd_adapter_start(adapter);
+  	}
+  
+  	btd_adapter_unref(adapter);
+--- 1099,1110 ----
+  		return;
+  	}
+  
+! 	if (mode != MODE_OFF) {
+! 		if (mgmt_powered(info->current_settings)) {
+! 			get_connections(sk, index);
+! 			btd_adapter_start(adapter);
+! 		} else
+! 			mgmt_set_powered(index, TRUE);
+  	}
+  
+  	btd_adapter_unref(adapter);

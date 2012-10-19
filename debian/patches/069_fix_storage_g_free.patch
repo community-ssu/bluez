@@ -1,0 +1,62 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+commit	0c954f40788eab758a0aff5583353a4fadf3ac22
+	Thu, 24 May 2012 08:03:58 +0000 (11:03 +0300)
+
+storage: Use g_free() instead of free()
+
+It is important to match g_*() memory allocation with g_free()
+
+diff -cr bluez-4.99.pan.orig/src/storage.c bluez-4.99.pan/src/storage.c
+*** bluez-4.99.pan.orig/src/storage.c	Mon Oct 15 08:15:03 2012
+--- bluez-4.99.pan/src/storage.c	Mon Oct 15 08:28:56 2012
+***************
+*** 695,701 ****
+  	else {
+  		char *new_str = service_list_to_string(services);
+  		ret = textfile_caseput(filename, addr, new_str);
+! 		free(new_str);
+  	}
+  
+  	g_slist_free(services);
+--- 695,701 ----
+  	else {
+  		char *new_str = service_list_to_string(services);
+  		ret = textfile_caseput(filename, addr, new_str);
+! 		g_free(new_str);
+  	}
+  
+  	g_slist_free(services);
+***************
+*** 780,786 ****
+  	err = textfile_put(filename, key, str);
+  
+  	free(buf.data);
+! 	free(str);
+  
+  	return err;
+  }
+--- 780,786 ----
+  	err = textfile_put(filename, key, str);
+  
+  	free(buf.data);
+! 	g_free(str);
+  
+  	return err;
+  }
+***************
+*** 802,808 ****
+  	}
+  
+  	rec = sdp_extract_pdu(pdata, size, &len);
+! 	free(pdata);
+  
+  	return rec;
+  }
+--- 802,808 ----
+  	}
+  
+  	rec = sdp_extract_pdu(pdata, size, &len);
+! 	g_free(pdata);
+  
+  	return rec;
+  }

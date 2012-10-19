@@ -1,0 +1,24 @@
+author	Johan Hedberg <johan.hedberg@intel.com>
+commit	c03184efcba31643349c734fbd4b6442782e10b3
+	Thu, 7 Jun 2012 06:41:40 +0000 (09:41 +0300)
+
+mgmtops: Fix handling of cmd_status(0)
+
+diff -cr bluez-4.99.pan.orig/plugins/mgmtops.c bluez-4.99.pan/plugins/mgmtops.c
+*** bluez-4.99.pan.orig/plugins/mgmtops.c	Mon Oct 15 09:50:34 2012
+--- bluez-4.99.pan/plugins/mgmtops.c	Mon Oct 15 10:34:23 2012
+***************
+*** 1472,1477 ****
+--- 1472,1483 ----
+  
+  	opcode = btohs(bt_get_unaligned(&ev->opcode));
+  
++ 	if (!ev->status) {
++ 		DBG("%s (0x%04x) cmd_status %u", mgmt_opstr(opcode), opcode,
++ 								ev->status);
++ 		return;
++ 	}
++ 
+  	error("hci%u: %s (0x%04x) failed: %s (0x%02x)", index,
+  			mgmt_opstr(opcode), opcode, mgmt_errstr(ev->status),
+  			ev->status);
