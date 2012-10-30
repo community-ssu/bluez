@@ -1,17 +1,16 @@
-From: Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
-Date: Fri, 19 Oct 2012 12:59:23 +0300
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	724d61c90c6d3864f499cefedacf2c526bfe1830
+	Mon, 29 Oct 2012 11:06:03 +0000 (13:06 +0200)
 
-Subject: [PATCH BlueZ v2] AVDTP: Do not keep a internal reference
+AVDTP: Do not keep a internal reference
 
 Don't initialize reference with 1, instead always start disconnect timer
 when reference drops to 0, so in case nobody reclaims the session it
 automatically disconnect after 1 second and frees the memory.
----
-v2: Fix with stream_setup flag being ignored in disconnect_timeout
 
 diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
 *** bluez-4.99.pan.orig/audio/avdtp.c	Thu Oct 18 09:45:10 2012
---- bluez-4.99.pan/audio/avdtp.c	Fri Oct 19 10:55:17 2012
+--- bluez-4.99.pan/audio/avdtp.c	Sat Oct 27 10:27:30 2012
 ***************
 *** 386,393 ****
   /* Structure describing an AVDTP connection between two devices */
@@ -124,7 +123,7 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
 ! static void connection_lost(struct avdtp *session, int err)
   {
 ! 	char address[18];
-  
+! 
 ! 	ba2str(&session->dst, address);
 ! 	DBG("Disconnected from %s", address);
   
@@ -151,15 +150,13 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   	if (session->io_id) {
   		g_source_remove(session->io_id);
   		session->io_id = 0;
---- 1095,1140 ----
+--- 1095,1135 ----
   	if (dev == NULL)
   		return -ENODEV;
   
 ! 	err = audio_device_cancel_authorization(dev, auth_cb, session);
 ! 	if (err < 0)
 ! 		return err;
-! 
-! 	avdtp_unref(session);
 ! 
 ! 	return 0;
   }
@@ -186,9 +183,6 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
 ! 	DBG("%p", session);
   
 ! 	g_slist_free_full(session->streams, stream_free);
-  
-! 	if (session->state != AVDTP_SESSION_STATE_DISCONNECTED)
-! 		avdtp_set_state(session, AVDTP_SESSION_STATE_DISCONNECTED);
   
   	if (session->io) {
   		g_io_channel_shutdown(session->io, FALSE, NULL);
@@ -225,7 +219,7 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   		return;
   
 ! 	session->ref--;
-! 
+  
 ! 	DBG("%p: ref=%d", session, session->ref);
   
 ! 	if (session->ref == 1) {
@@ -256,7 +250,7 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
 ! 	if (session->dc_timer)
 ! 		remove_disconnect_timer(session);
   
-! 	server->sessions = g_slist_remove(server->sessions, session);
+  	server->sessions = g_slist_remove(server->sessions, session);
   
 ! 	if (session->req)
 ! 		pending_req_free(session->req);
@@ -269,12 +263,10 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   }
   
   struct avdtp *avdtp_ref(struct avdtp *session)
---- 1143,1234 ----
+--- 1138,1228 ----
   	if (session->dc_timer)
   		remove_disconnect_timer(session);
   
-! 	avdtp_cancel_authorization(session);
-! 
 ! 	if (session->req)
 ! 		pending_req_free(session->req);
 ! 
@@ -301,14 +293,8 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
 ! 		sink_setup_stream(dev->sink, session);
 ! 	else if (dev && dev->source && stream_setup)
 ! 		source_setup_stream(dev->source, session);
-! 	else if (session->ref > 0)
+! 	else
 ! 		connection_lost(session, ETIMEDOUT);
-! 	else {
-! 		struct avdtp_server *server = session->server;
-! 
-! 		server->sessions = g_slist_remove(server->sessions, session);
-! 		avdtp_free(session);
-! 	}
 ! 
 ! 	return FALSE;
   }
@@ -330,6 +316,7 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   
 ! static void connection_lost(struct avdtp *session, int err)
 ! {
+! 	struct avdtp_server *server = session->server;
 ! 	char address[18];
   
 ! 	ba2str(&session->dst, address);
@@ -344,7 +331,13 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
 ! 	finalize_discovery(session, err);
   
 ! 	avdtp_set_state(session, AVDTP_SESSION_STATE_DISCONNECTED);
-! }
+  
+! 	if (session->ref > 0)
+! 		return;
+  
+  	server->sessions = g_slist_remove(server->sessions, session);
++ 	avdtp_free(session);
++ }
   
 ! void avdtp_unref(struct avdtp *session)
 ! {
@@ -357,7 +350,7 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   
 ! 	if (session->ref > 0)
 ! 		return;
-  
+! 
 ! 	set_disconnect_timer(session);
   }
   
@@ -376,37 +369,19 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   		if (session->req && session->req->collided) {
   			DBG("Collision detected");
   			goto next;
---- 2214,2219 ----
+--- 2208,2213 ----
 ***************
 *** 2376,2382 ****
   
   	session->server = server;
   	bacpy(&session->dst, dst);
-! 	session->ref = 1;
+- 	session->ref = 1;
   	/* We don't use avdtp_set_state() here since this isn't a state change
   	 * but just setting of the initial state */
   	session->state = AVDTP_SESSION_STATE_DISCONNECTED;
---- 2360,2366 ----
-  
-  	session->server = server;
-  	bacpy(&session->dst, dst);
-! 	set_disconnect_timer(session);
-  	/* We don't use avdtp_set_state() here since this isn't a state change
-  	 * but just setting of the initial state */
-  	session->state = AVDTP_SESSION_STATE_DISCONNECTED;
+--- 2354,2359 ----
 ***************
-*** 2482,2487 ****
---- 2466,2473 ----
-  	struct avdtp *session = user_data;
-  	GError *err = NULL;
-  
-+ 	avdtp_unref(session);
-+ 
-  	if (derr && dbus_error_is_set(derr)) {
-  		error("Access denied: %s", derr->message);
-  		connection_lost(session, EACCES);
-***************
-*** 2577,2586 ****
+*** 2577,2583 ****
   							auth_cb, session);
   	if (perr < 0) {
   		avdtp_set_state(session, AVDTP_SESSION_STATE_DISCONNECTED);
@@ -414,22 +389,7 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   		goto drop;
   	}
   
-  	dev->auto_connect = auto_connect;
-  
-  	return;
---- 2563,2574 ----
-  							auth_cb, session);
-  	if (perr < 0) {
-  		avdtp_set_state(session, AVDTP_SESSION_STATE_DISCONNECTED);
-  		goto drop;
-  	}
-  
-+ 	/* Disable disconnect timer while authorizing */
-+ 	avdtp_ref(session);
-+ 
-  	dev->auto_connect = auto_connect;
-  
-  	return;
+--- 2554,2559 ----
 ***************
 *** 3989,4011 ****
   void avdtp_exit(const bdaddr_t *src)
@@ -455,7 +415,7 @@ diff -cr bluez-4.99.pan.orig/audio/avdtp.c bluez-4.99.pan/audio/avdtp.c
   
   	servers = g_slist_remove(servers, server);
   
---- 3977,3988 ----
+--- 3965,3976 ----
   void avdtp_exit(const bdaddr_t *src)
   {
   	struct avdtp_server *server;
