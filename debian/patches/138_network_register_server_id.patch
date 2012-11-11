@@ -1,0 +1,145 @@
+author	Mikel Astiz <mikel.astiz@bmw-carit.de>
+commit	1541c28068b6daa097b56e0845ad0b410e80e81d
+	Thu, 25 Oct 2012 10:34:08 +0000 (13:34 +0300)
+
+network: Specify id while registering server
+
+Only one type of server is being installed (BNEP_SVC_NAP), but the
+server API actually supports having several of them. Therefore, it is
+more accurate to specify BNEP_SVC_NAP in the manager's side.
+
+diff -cr bluez-4.99.pan.orig/network/manager.c bluez-4.99.pan/network/manager.c
+*** bluez-4.99.pan.orig/network/manager.c	Wed Jan 11 17:44:59 2012
+--- bluez-4.99.pan/network/manager.c	Sun Oct 28 09:54:43 2012
+***************
+*** 130,136 ****
+  
+  	DBG("path %s", path);
+  
+! 	return server_register(adapter);
+  }
+  
+  static void network_server_remove(struct btd_adapter *adapter)
+--- 130,136 ----
+  
+  	DBG("path %s", path);
+  
+! 	return server_register(adapter, BNEP_SVC_NAP);
+  }
+  
+  static void network_server_remove(struct btd_adapter *adapter)
+***************
+*** 139,145 ****
+  
+  	DBG("path %s", path);
+  
+! 	server_unregister(adapter);
+  }
+  
+  static struct btd_device_driver network_panu_driver = {
+--- 139,145 ----
+  
+  	DBG("path %s", path);
+  
+! 	server_unregister(adapter, BNEP_SVC_NAP);
+  }
+  
+  static struct btd_device_driver network_panu_driver = {
+diff -cr bluez-4.99.pan.orig/network/server.c bluez-4.99.pan/network/server.c
+*** bluez-4.99.pan.orig/network/server.c	Wed Oct 17 15:33:26 2012
+--- bluez-4.99.pan/network/server.c	Sun Oct 28 12:18:23 2012
+***************
+*** 783,789 ****
+  	return na;
+  }
+  
+! int server_register(struct btd_adapter *adapter)
+  {
+  	struct network_adapter *na;
+  	struct network_server *ns;
+--- 783,789 ----
+  	return na;
+  }
+  
+! int server_register(struct btd_adapter *adapter, uint16_t id)
+  {
+  	struct network_adapter *na;
+  	struct network_server *ns;
+***************
+*** 797,803 ****
+  		adapters = g_slist_append(adapters, na);
+  	}
+  
+! 	ns = find_server(na->servers, BNEP_SVC_NAP);
+  	if (ns)
+  		return 0;
+  
+--- 797,803 ----
+  		adapters = g_slist_append(adapters, na);
+  	}
+  
+! 	ns = find_server(na->servers, id);
+  	if (ns)
+  		return 0;
+  
+***************
+*** 818,824 ****
+  	}
+  
+  	adapter_get_address(adapter, &ns->src);
+! 	ns->id = BNEP_SVC_NAP;
+  	ns->na = na;
+  	ns->record_id = 0;
+  	na->servers = g_slist_append(na->servers, ns);
+--- 818,824 ----
+  	}
+  
+  	adapter_get_address(adapter, &ns->src);
+! 	ns->id = id;
+  	ns->na = na;
+  	ns->record_id = 0;
+  	na->servers = g_slist_append(na->servers, ns);
+***************
+*** 828,838 ****
+  	return 0;
+  }
+  
+! int server_unregister(struct btd_adapter *adapter)
+  {
+  	struct network_adapter *na;
+  	struct network_server *ns;
+- 	uint16_t id = BNEP_SVC_NAP;
+  
+  	na = find_adapter(adapters, adapter);
+  	if (!na)
+--- 828,837 ----
+  	return 0;
+  }
+  
+! int server_unregister(struct btd_adapter *adapter, uint16_t id)
+  {
+  	struct network_adapter *na;
+  	struct network_server *ns;
+  
+  	na = find_adapter(adapters, adapter);
+  	if (!na)
+diff -cr bluez-4.99.pan.orig/network/server.h bluez-4.99.pan/network/server.h
+*** bluez-4.99.pan.orig/network/server.h	Tue Jul 13 03:08:59 2010
+--- bluez-4.99.pan/network/server.h	Sun Oct 28 12:22:45 2012
+***************
+*** 23,29 ****
+  
+  int server_init(DBusConnection *conn, gboolean secure);
+  void server_exit(void);
+! int server_register(struct btd_adapter *adapter);
+! int server_unregister(struct btd_adapter *adapter);
+  
+  int server_find_data(const char *path, const char *pattern);
+--- 23,29 ----
+  
+  int server_init(DBusConnection *conn, gboolean secure);
+  void server_exit(void);
+! int server_register(struct btd_adapter *adapter, uint16_t id);
+! int server_unregister(struct btd_adapter *adapter, uint16_t id);
+  
+  int server_find_data(const char *path, const char *pattern);
