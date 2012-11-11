@@ -1,0 +1,1239 @@
+author	Ludek Finstrle <luf@pzkagis.cz>
+
+network: PAN backport PANU, GN and NAP support
+
+This patch allows you to use GN and NAP with bridge support also PANU for peer
+networking and also backports the configuration in network.conf file which
+allows automatic bluetooth network startup. It also adds possibility of
+permanent connection/registration with signals.
+
+diff -ur bluez-4.99.pan.orig/doc/network-api.txt bluez-4.99.pan/doc/network-api.txt
+--- bluez-4.99.pan.orig/doc/network-api.txt	2010-07-13 03:08:59.000000000 -0400
++++ bluez-4.99.pan/doc/network-api.txt	2012-11-10 21:46:16.087578938 -0500
+@@ -28,6 +28,12 @@
+ 			Possible errors: org.bluez.Error.AlreadyConnected
+ 					 org.bluez.Error.ConnectionAttemptFailed
+ 
++		string ConnectPermanent(string uuid)
++
++			Same as Connect with the only difference that this
++			connection survives client disappearing from the
++			message bus.
++
+ 		void Disconnect()
+ 
+ 			Disconnect from the network device.
+@@ -64,14 +70,14 @@
+ ========================
+ 
+ Service		org.bluez
+-Interface	org.bluez.NetworkServer
+-Object path	/org/bluez/{hci0,hci1,...}
++Interface	org.bluez.Network{Peer,Hub,Router} 
++Object path	[variable prefix]/{hci0,hci1,...}
+ 
+-Methods		void Register(string uuid, string bridge)
++Methods		void Register(string uuid, string netif)
+ 
+ 			Register server for the provided UUID. Every new
+-			connection to this server will be added the bridge
+-			interface.
++			connection to this server will be added to the bridge
++			interface for Hub and Router.
+ 
+ 			Valid UUIDs are "gn", "panu" or "nap".
+ 
+@@ -80,9 +86,41 @@
+ 			and the BNEP server will be ready for incoming
+ 			connections.
+ 
++			It will be removed and network devices released either
++			upon calling Unregister() or when the client disappears
++			from the message bus.
++
++		void RegisterPermanent(string uuid, string netif)
++
++			Same as Register with the only difference that this
++			registration survives client disappearing from the
++			message bus.
++
+ 		void Unregister(string uuid)
+ 
+ 			Unregister the server for provided UUID.
+ 
+ 			All servers will be automatically unregistered when
+ 			the calling application terminates.
++
++		dict GetProperties()
++
++			Returns all properties. See the properties section
++			for available properties.
++
++Signals		PropertyChanged(string name, variant value)
++
++			This signal indicates a changed value of the given
++			property.
++
++Properties	boolean Registered [readonly]
++
++			Indicates if it's registered.
++
++		string Interface [readonly]
++
++			Shows the bridge name or interface prefix.
++
++		string UUID [readonly]
++
++			Shows the role.
+diff -ur bluez-4.99.pan.orig/network/common.c bluez-4.99.pan/network/common.c
+--- bluez-4.99.pan.orig/network/common.c	2012-10-17 15:33:26.278186271 -0400
++++ bluez-4.99.pan/network/common.c	2012-11-11 09:19:57.643543673 -0500
+@@ -32,6 +32,8 @@
+ #include <sys/param.h>
+ #include <sys/ioctl.h>
+ #include <sys/socket.h>
++#include <sys/stat.h>
++#include <sys/types.h>
+ #include <sys/wait.h>
+ #include <net/if.h>
+ #include <linux/sockios.h>
+@@ -46,6 +48,11 @@
+ #include "common.h"
+ 
+ static int ctl;
++static GSList *scripts;
++
++static const char *panu_script = NULL;
++static const char *gn_script = NULL;
++static const char *nap_script = NULL;
+ 
+ static struct {
+ 	const char	*name;		/* Friendly name */
+@@ -58,6 +65,58 @@
+ 	{ NULL }
+ };
+ 
++struct bnep_data {
++	char *devname;
++	GPid pid;
++};
++
++static void bnep_data_free(struct bnep_data *bnep)
++{
++	if (bnep == NULL)
++		return;
++
++	g_free(bnep->devname);
++	g_free(bnep);
++}
++
++static gint find_devname(gconstpointer a, gconstpointer b)
++{
++	struct bnep_data *data = (struct bnep_data *) a;
++	const char *devname = b;
++
++	return strcmp(data->devname, devname);
++}
++
++static gint find_pid(gconstpointer a, gconstpointer b)
++{
++	struct bnep_data *data = (struct bnep_data *) a;
++	const GPid *pid = b;
++
++	return data->pid - *pid;
++}
++
++static void script_exited(GPid pid, gint status, gpointer data)
++{
++	struct bnep_data *bnep;
++	GSList *l;
++
++	if (WIFEXITED(status))
++		DBG("%d exited with status %d", pid, WEXITSTATUS(status));
++	else
++		DBG("%d was killed by signal %d", pid, WTERMSIG(status));
++
++	g_spawn_close_pid(pid);
++
++	l = g_slist_find_custom(scripts, &pid, find_pid);
++
++	if (!l)
++		return;
++
++	bnep = l->data;
++	scripts = g_slist_remove(scripts, bnep);
++	bnep_data_free(bnep);
++}
++
+ uint16_t bnep_service_id(const char *svc)
+ {
+ 	int i;
+@@ -103,7 +162,8 @@
+ 	return NULL;
+ }
+ 
+-int bnep_init(void)
++int bnep_init(const char *panu_scriptname, const char *gn_scriptname,
++		const char *nap_scriptname)
+ {
+ 	ctl = socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_BNEP);
+ 
+@@ -114,6 +174,10 @@
+ 		return err;
+ 	}
+ 
++	panu_script = panu_scriptname;
++	gn_script = gn_scriptname;
++	nap_script = nap_scriptname;
++
+ 	return 0;
+ }
+ 
+@@ -187,10 +251,30 @@
+ 	return 0;
+ }
+ 
+-int bnep_if_up(const char *devname)
++static void bnep_setup(gpointer data)
++{
++}
++
++static int bnep_exec(const char **argv)
++{
++	int pid;
++	GSpawnFlags flags = G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH;
++
++	if (!g_spawn_async(NULL, (char **) argv, NULL, flags, bnep_setup, NULL,
++				&pid, NULL)) {
++		error("Unable to execute %s %s", argv[0], argv[1]);
++		return -EINVAL;
++	}
++
++	return pid;
++}
++
++int bnep_if_up(const char *devname, uint16_t id)
+ {
+ 	struct ifreq ifr;
+ 	int sk, err;
++	const char *argv[3];
++	struct bnep_data *bnep = NULL;
+ 
+ 	sk = socket(AF_INET, SOCK_DGRAM, 0);
+ 
+@@ -209,6 +293,33 @@
+ 		return err;
+ 	}
+ 
++	if (id == BNEP_SVC_PANU)
++		argv[0] = panu_script;
++	else if (id == BNEP_SVC_GN)
++		argv[0] = gn_script;
++	else if (id == BNEP_SVC_NAP)
++		argv[0] = nap_script;
++	else
++		return 0;
++
++	if (argv[0] == NULL)
++		return 0;
++
++	argv[1] = devname;
++	argv[2] = NULL;
++
++	bnep = g_new0(struct bnep_data, 1);
++	bnep->devname = g_strdup(devname);
++
++	bnep->pid = bnep_exec(argv);
++
++	if (bnep->pid > 0) {
++		g_child_watch_add(bnep->pid, script_exited, bnep);
++		scripts = g_slist_append(scripts, bnep);
++	} else {
++		bnep_data_free(bnep);
++	}
++
+ 	return 0;
+ }
+ 
+@@ -216,6 +327,8 @@
+ {
+ 	struct ifreq ifr;
+ 	int sk, err;
++	struct bnep_data *bnep = NULL;
++	GSList *l;
+ 
+ 	sk = socket(AF_INET, SOCK_DGRAM, 0);
+ 
+@@ -234,6 +347,24 @@
+ 		return err;
+ 	}
+ 
++	/* Just try to kill the script */
++	l = g_slist_find_custom(scripts, devname, find_devname);
++
++	if (!l)
++		return 0;
++
++	bnep = l->data;
++	scripts = g_slist_remove(scripts, bnep);
++
++	/* Kill script */
++	err = kill(bnep->pid, SIGTERM);
++	
++	if (err < 0)
++		error("%s: kill(%d, SIGTERM): %s (%d)", bnep->devname,
++				bnep->pid, strerror(errno), errno);
++
++	bnep_data_free(bnep);
++
+ 	return 0;
+ }
+ 
+@@ -298,3 +429,71 @@
+ 
+ 	return 0;
+ }
++
++int bridge_not_supported()
++{
++	struct stat st;
++
++	if (stat("/sys/module/bridge", &st) < 0 &&
++			stat("/sys/module/bridgedriver", &st) < 0)
++		return -EOPNOTSUPP;
++
++	return 0;
++}
++
++int bridge_init(const char *bridge, uint16_t id)
++{
++	int sk, err;
++
++	err = bridge_not_supported();
++	if (err < 0) {
++		error("Bridge is not supported by kernel");
++		return err;
++	}
++
++	sk = socket(AF_INET, SOCK_STREAM, 0);
++	if (sk < 0)
++		return -errno;
++
++	err = ioctl(sk, SIOCBRADDBR, bridge);
++	if (err < 0) {
++		if (errno != EEXIST) {
++			error("Failed to create bridge %s: %s (%d)",
++					bridge, strerror(errno), errno);
++			return -errno;
++		}
++
++		info("bridge %s: %s (%d)",
++					bridge, strerror(errno), errno);
++		close(sk);
++
++		return 0;
++	}
++
++	close(sk);
++
++	info("bridge %s: created", bridge);
++
++	bnep_if_up(bridge, id);
++
++	return 0;
++}
++
++int bridge_cleanup(const char *bridge)
++{
++	int sk, err;
++
++	bnep_if_down(bridge);
++
++	sk = socket(AF_INET, SOCK_STREAM, 0);
++	if (sk < 0)
++		return -errno;
++
++	err = ioctl(sk, SIOCBRDELBR, bridge);
++	if (err < 0)
++		return -errno;
++
++	info("bridge %s:removed", bridge);
++
++	return 0;
++}
+diff -ur bluez-4.99.pan.orig/network/common.h bluez-4.99.pan/network/common.h
+--- bluez-4.99.pan.orig/network/common.h	2012-10-17 15:33:26.278186271 -0400
++++ bluez-4.99.pan/network/common.h	2012-11-10 19:26:11.019569239 -0500
+@@ -26,7 +26,8 @@
+ #define GN_UUID		"00001117-0000-1000-8000-00805f9b34fb"
+ #define BNEP_SVC_UUID	"0000000f-0000-1000-8000-00805f9b34fb"
+ 
+-int bnep_init(void);
++int bnep_init(const char *panu_script, const char *gn_script,
++		const char *nap_script);
+ int bnep_cleanup(void);
+ 
+ uint16_t bnep_service_id(const char *svc);
+@@ -37,7 +38,11 @@
+ int bnep_kill_all_connections(void);
+ 
+ int bnep_connadd(int sk, uint16_t role, char *dev);
+-int bnep_if_up(const char *devname);
++int bnep_if_up(const char *devname, uint16_t id);
+ int bnep_if_down(const char *devname);
+ int bnep_add_to_bridge(const char *devname, const char *bridge);
+ int bnep_del_from_bridge(const char *devname, const char *bridge);
++
++int bridge_init(const char *bridge, uint16_t id);
++int bridge_cleanup(const char *bridge);
++int bridge_not_supported();
+diff -ur bluez-4.99.pan.orig/network/connection.c bluez-4.99.pan/network/connection.c
+--- bluez-4.99.pan.orig/network/connection.c	2012-10-17 15:33:26.278186271 -0400
++++ bluez-4.99.pan/network/connection.c	2012-11-11 09:05:58.695546801 -0500
+@@ -116,6 +116,8 @@
+ {
+ 	struct network_conn *nc = data;
+ 
++	DBG("cond %d", cond);
++
+ 	if (connection != NULL) {
+ 		gboolean connected = FALSE;
+ 		const char *property = "";
+@@ -141,7 +143,7 @@
+ 	bnep_if_down(nc->dev);
+ 	nc->state = DISCONNECTED;
+ 	memset(nc->dev, 0, sizeof(nc->dev));
+-	strcpy(nc->dev, "bnep%d");
++	strcpy(nc->dev, "panu%d");
+ 
+ 	return FALSE;
+ }
+@@ -176,11 +178,18 @@
+ {
+ 	struct network_conn *nc = user_data;
+ 
++	DBG();
++
+ 	if (nc->state == CONNECTED) {
+ 		bnep_if_down(nc->dev);
+ 		bnep_kill_connection(&nc->peer->dst);
+ 	} else if (nc->io)
+ 		cancel_connection(nc, NULL);
++
++	if (nc->msg) {
++		dbus_message_unref(nc->msg);
++		nc->msg = NULL;
++	}
+ }
+ 
+ static void disconnect_cb(struct btd_device *device, gboolean removal,
+@@ -265,7 +274,7 @@
+ 		goto failed;
+ 	}
+ 
+-	bnep_if_up(nc->dev);
++	bnep_if_up(nc->dev, BNEP_SVC_PANU);
+ 	pdev = nc->dev;
+ 	uuid = bnep_uuid(nc->id);
+ 
+@@ -289,6 +298,13 @@
+ 						nc, NULL);
+ 
+ 	info("%s connected", nc->dev);
++
++	/* remove msg for permanent connection */
++	if (!nc->watch && nc->msg) {
++		dbus_message_unref(nc->msg);
++		nc->msg = NULL;
++	}
++
+ 	/* Start watchdog */
+ 	g_io_add_watch(chan, G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+ 			(GIOFunc) bnep_watchdog_cb, nc);
+@@ -393,7 +409,8 @@
+ 
+ /* Connect and initiate BNEP session */
+ static DBusMessage *connection_connect(DBusConnection *conn,
+-						DBusMessage *msg, void *data)
++					DBusMessage *msg, void *data,
++					gboolean permanent)
+ {
+ 	struct network_peer *peer = data;
+ 	struct network_conn *nc;
+@@ -431,15 +448,32 @@
+ 	}
+ 
+ 	nc->state = CONNECTING;
++
+ 	nc->msg = dbus_message_ref(msg);
+-	nc->watch = g_dbus_add_disconnect_watch(conn,
++
++	if (!permanent)
++		nc->watch = g_dbus_add_disconnect_watch(conn,
+ 						dbus_message_get_sender(msg),
+ 						connection_destroy,
+ 						nc, NULL);
++	else
++		nc->watch = 0;
+ 
+ 	return NULL;
+ }
+ 
++static DBusMessage *connection_connect_connected(DBusConnection *conn,
++						DBusMessage *msg, void *data)
++{
++	return connection_connect(conn, msg, data, FALSE);
++}
++
++static DBusMessage *connection_connect_permanent(DBusConnection *conn,
++						DBusMessage *msg, void *data)
++{
++	return connection_connect(conn, msg, data, TRUE);
++}
++
+ static DBusMessage *connection_cancel(DBusConnection *conn,
+ 						DBusMessage *msg, void *data)
+ {
+@@ -447,8 +481,10 @@
+ 	const char *owner = dbus_message_get_sender(nc->msg);
+ 	const char *caller = dbus_message_get_sender(msg);
+ 
+-	if (!g_str_equal(owner, caller))
+-		return btd_error_not_authorized(msg);
++	DBG();
++
++	if (owner != NULL && !g_str_equal(owner, caller))
++			return btd_error_not_authorized(msg);
+ 
+ 	connection_destroy(conn, nc);
+ 
+@@ -461,6 +497,8 @@
+ 	struct network_peer *peer = data;
+ 	GSList *l;
+ 
++	DBG();
++
+ 	for (l = peer->connections; l; l = l->next) {
+ 		struct network_conn *nc = l->data;
+ 
+@@ -556,7 +594,9 @@
+ }
+ 
+ static GDBusMethodTable connection_methods[] = {
+-	{ "Connect",		"s",	"s",	connection_connect,
++	{ "Connect",		"s",	"s",	connection_connect_connected,
++						G_DBUS_METHOD_FLAG_ASYNC },
++	{ "ConnectPermanent",	"s",	"s",	connection_connect_permanent,
+ 						G_DBUS_METHOD_FLAG_ASYNC },
+ 	{ "Disconnect",		"",	"",	connection_disconnect	},
+ 	{ "GetProperties",	"",	"a{sv}",connection_get_properties },
+@@ -642,7 +682,7 @@
+ 	nc = g_new0(struct network_conn, 1);
+ 	nc->id = id;
+ 	memset(nc->dev, 0, sizeof(nc->dev));
+-	strcpy(nc->dev, "bnep%d");
++	strcpy(nc->dev, "panu%d");
+ 	nc->state = DISCONNECTED;
+ 	nc->peer = peer;
+ 
+diff -ur bluez-4.99.pan.orig/network/manager.c bluez-4.99.pan/network/manager.c
+--- bluez-4.99.pan.orig/network/manager.c	2012-10-29 07:45:32.135417233 -0400
++++ bluez-4.99.pan/network/manager.c	2012-11-10 21:57:41.427468436 -0500
+@@ -43,12 +43,43 @@
+ 
+ static DBusConnection *connection = NULL;
+ 
+-static gboolean conf_security = TRUE;
++static struct network_conf {
++	gboolean connection_enabled;
++	gboolean server_enabled;
++	gboolean security;
++	char *panu_ifpre;
++	char *panu_script;
++	char *gn_iface;
++	char *gn_script;
++	char *nap_iface;
++	char *nap_script;
++} conf = {
++	.connection_enabled = TRUE,
++	.server_enabled = TRUE,
++	.security	= TRUE,
++	.panu_ifpre	= NULL,
++	.panu_script	= NULL,
++	.gn_iface	= NULL,
++	.gn_script	= NULL,
++	.nap_iface	= NULL,
++	.nap_script	= NULL
++};
++
++static void conf_cleanup(void)
++{
++	g_free(conf.panu_ifpre);
++	g_free(conf.panu_script);
++	g_free(conf.gn_iface);
++	g_free(conf.gn_script);
++	g_free(conf.nap_iface);
++	g_free(conf.nap_script);
++}
+ 
+ static void read_config(const char *file)
+ {
+ 	GKeyFile *keyfile;
+ 	GError *err = NULL;
++	char **disabled;
+ 
+ 	keyfile = g_key_file_new();
+ 
+@@ -57,18 +88,94 @@
+ 		goto done;
+ 	}
+ 
+-	conf_security = !g_key_file_get_boolean(keyfile, "General",
++	disabled = g_key_file_get_string_list(keyfile, "General",
++						"Disable", NULL, &err);
++	if (err) {
++		DBG("%s: %s", file, err->message);
++		g_clear_error(&err);
++	} else {
++		int i;
++		for (i = 0; disabled[i] != NULL; i++) {
++			if (g_str_equal(disabled[i], "Connection"))
++				conf.connection_enabled = FALSE;
++			else if (g_str_equal(disabled[i], "Server"))
++				conf.server_enabled = FALSE;
++		}
++		g_strfreev(disabled);
++	}
++
++	conf.security = !g_key_file_get_boolean(keyfile, "General",
+ 						"DisableSecurity", &err);
+ 	if (err) {
+ 		DBG("%s: %s", file, err->message);
+ 		g_clear_error(&err);
+ 	}
+ 
++	/* Peer role */
++	conf.panu_ifpre = g_key_file_get_string(keyfile, "PANU Role",
++						"Interface", &err);
++	if (err) {
++		DBG("%s: %s", file, err->message);
++		g_clear_error(&err);
++	}
++
++	if (conf.panu_ifpre != NULL) {
++		conf.panu_script = g_key_file_get_string(keyfile,
++					"PANU Role", "Script", &err);
++		if (err) {
++			DBG("%s: %s", file, err->message);
++			g_clear_error(&err);
++		}
++
++	}
++
++	/* GN role */
++	conf.gn_iface = g_key_file_get_string(keyfile, "GN Role",
++						"Interface", &err);
++	if (err) {
++		DBG("%s: %s", file, err->message);
++		g_clear_error(&err);
++	}
++
++	if (conf.gn_iface != NULL) {
++		conf.gn_script = g_key_file_get_string(keyfile,
++					"GN Role", "Script", &err);
++		if (err) {
++			DBG("%s: %s", file, err->message);
++			g_clear_error(&err);
++		}
++
++	}
++
++	/* NAP role */
++	conf.nap_iface = g_key_file_get_string(keyfile, "NAP Role",
++						"Interface", &err);
++	if (err) {
++		DBG("%s: %s", file, err->message);
++		g_clear_error(&err);
++	}
++
++	if (conf.nap_iface != NULL) {
++		conf.nap_script = g_key_file_get_string(keyfile,
++					"NAP Role", "Script", &err);
++		if (err) {
++			DBG("%s: %s", file, err->message);
++			g_clear_error(&err);
++		}
++
++	}
++
+ done:
+ 	g_key_file_free(keyfile);
+ 
+-	DBG("Config options: Security=%s",
+-				conf_security ? "true" : "false");
++	DBG("Config options: Security=%s, "
++			"PANU_Interface=%s, PANU_Script=%s, " 
++			"GN_Interface=%s, GN_Script=%s, "
++			"NAP_Interface=%s, NAP_Script=%s",
++			conf.security ? "true" : "false",
++			conf.panu_ifpre, conf.panu_script,
++			conf.gn_iface, conf.gn_script,
++			conf.nap_iface, conf.nap_script);
+ }
+ 
+ static int network_probe(struct btd_device *device, GSList *uuids, uint16_t id)
+@@ -79,6 +186,9 @@
+ 
+ 	DBG("path %s", path);
+ 
++	if (!conf.connection_enabled)
++		return 0;
++
+ 	adapter_get_address(adapter, &src);
+ 	device_get_address(device, &dst, NULL);
+ 
+@@ -124,22 +234,59 @@
+ 	network_remove(device, BNEP_SVC_NAP);
+ }
+ 
+-static int network_server_probe(struct btd_adapter *adapter)
++static int network_server_probe(struct btd_adapter *adapter, uint16_t id,
++				gboolean enable, const char *bridge)
+ {
+ 	const gchar *path = adapter_get_path(adapter);
+ 
+ 	DBG("path %s", path);
+ 
+-	return server_register(adapter, BNEP_SVC_NAP);
++	if (!conf.server_enabled)
++		return 0;
++
++	return server_register(adapter, id, enable, bridge);
+ }
+ 
+-static void network_server_remove(struct btd_adapter *adapter)
++static void network_server_remove(struct btd_adapter *adapter, uint16_t id)
+ {
+ 	const gchar *path = adapter_get_path(adapter);
+ 
+ 	DBG("path %s", path);
+ 
+-	server_unregister(adapter, BNEP_SVC_NAP);
++	server_unregister(adapter, id);
++}
++
++static int panu_server_probe(struct btd_adapter *adapter)
++{
++	return network_server_probe(adapter, BNEP_SVC_PANU,
++				conf.panu_ifpre != NULL, conf.panu_ifpre);
++}
++
++static void panu_server_remove(struct btd_adapter *adapter)
++{
++	network_server_remove(adapter, BNEP_SVC_PANU);
++}
++
++static int gn_server_probe(struct btd_adapter *adapter)
++{
++	return network_server_probe(adapter, BNEP_SVC_GN,
++				conf.gn_iface != NULL, conf.gn_iface);
++}
++
++static void gn_server_remove(struct btd_adapter *adapter)
++{
++	network_server_remove(adapter, BNEP_SVC_GN);
++}
++
++static int nap_server_probe(struct btd_adapter *adapter)
++{
++	return network_server_probe(adapter, BNEP_SVC_NAP,
++				conf.nap_iface != NULL, conf.nap_iface);
++}
++
++static void nap_server_remove(struct btd_adapter *adapter)
++{
++	network_server_remove(adapter, BNEP_SVC_NAP);
+ }
+ 
+ static struct btd_device_driver network_panu_driver = {
+@@ -163,17 +310,29 @@
+ 	.remove	= nap_remove,
+ };
+ 
+-static struct btd_adapter_driver network_server_driver = {
+-	.name	= "network-server",
+-	.probe	= network_server_probe,
+-	.remove	= network_server_remove,
++static struct btd_adapter_driver network_panu_server_driver = {
++	.name	= "network-panu-server",
++	.probe	= panu_server_probe,
++	.remove	= panu_server_remove,
++};
++
++static struct btd_adapter_driver network_gn_server_driver = {
++	.name	= "network-gn-server",
++	.probe	= gn_server_probe,
++	.remove	= gn_server_remove,
++};
++
++static struct btd_adapter_driver network_nap_server_driver = {
++	.name	= "network-nap-server",
++	.probe	= nap_server_probe,
++	.remove	= nap_server_remove,
+ };
+ 
+ int network_manager_init(DBusConnection *conn)
+ {
+ 	read_config(CONFIGDIR "/network.conf");
+ 
+-	if (bnep_init()) {
++	if (bnep_init(conf.panu_script, conf.gn_script, conf.nap_script)) {
+ 		error("Can't init bnep module");
+ 		return -1;
+ 	}
+@@ -184,12 +343,23 @@
+ 	 * (setup connection request) contains the destination service
+ 	 * field that defines which service the source is connecting to.
+ 	 */
++	if (conf.gn_iface != NULL &&
++			bridge_init(conf.gn_iface, BNEP_SVC_GN) < 0)
++		error("Failed GN startup: Unable to initialize bridge %s",
++			conf.gn_iface);
++
++	if (conf.nap_iface != NULL &&
++			bridge_init(conf.nap_iface, BNEP_SVC_NAP) < 0)
++		error("Failed NAP startup: Unable to initialize bridge %s",
++			conf.nap_iface);
+ 
+-	if (server_init(conn, conf_security) < 0)
++	if (server_init(conn, conf.security) < 0)
+ 		return -1;
+ 
+ 	/* Register network server if it doesn't exist */
+-	btd_register_adapter_driver(&network_server_driver);
++	btd_register_adapter_driver(&network_panu_server_driver);
++	btd_register_adapter_driver(&network_gn_server_driver);
++	btd_register_adapter_driver(&network_nap_server_driver);
+ 
+ 	if (connection_init(conn) < 0)
+ 		return -1;
+@@ -213,10 +383,19 @@
+ 
+ 	connection_exit();
+ 
+-	btd_unregister_adapter_driver(&network_server_driver);
++	btd_unregister_adapter_driver(&network_panu_server_driver);
++	btd_unregister_adapter_driver(&network_gn_server_driver);
++	btd_unregister_adapter_driver(&network_nap_server_driver);
+ 
+ 	dbus_connection_unref(connection);
+ 	connection = NULL;
+ 
+ 	bnep_cleanup();
++
++	if (conf.gn_iface != NULL)
++		bridge_cleanup(conf.gn_iface);
++	if (conf.nap_iface != NULL)
++		bridge_cleanup(conf.nap_iface);
++
++	conf_cleanup();
+ }
+diff -ur bluez-4.99.pan.orig/network/server.c bluez-4.99.pan/network/server.c
+--- bluez-4.99.pan.orig/network/server.c	2012-10-29 07:45:58.471368580 -0400
++++ bluez-4.99.pan/network/server.c	2012-11-11 09:23:07.731542750 -0500
+@@ -29,6 +29,7 @@
+ #include <unistd.h>
+ #include <stdlib.h>
+ #include <errno.h>
++#include <string.h>
+ 
+ #include <bluetooth/bluetooth.h>
+ #include <bluetooth/bnep.h>
+@@ -51,7 +52,9 @@
+ #include "common.h"
+ #include "server.h"
+ 
+-#define NETWORK_SERVER_INTERFACE "org.bluez.NetworkServer"
++#define NETWORK_PEER_INTERFACE "org.bluez.NetworkPeer"
++#define NETWORK_HUB_INTERFACE "org.bluez.NetworkHub"
++#define NETWORK_ROUTER_INTERFACE "org.bluez.NetworkRouter"
+ #define SETUP_TIMEOUT		1
+ 
+ /* Pending Authorization */
+@@ -74,7 +77,7 @@
+ 	bdaddr_t	src;		/* Bluetooth Local Address */
+ 	char		*iface;		/* DBus interface */
+ 	char		*name;		/* Server service name */
+-	char		*bridge;	/* Bridge name */
++	char		*netif;		/* PANU: interface prefix; other: Bridge name */
+ 	uint32_t	record_id;	/* Service record id */
+ 	uint16_t	id;		/* Service class identifier */
+ 	GSList		*sessions;	/* Active connections */
+@@ -270,7 +273,10 @@
+ 	int err, nsk;
+ 
+ 	memset(devname, 0, sizeof(devname));
+-	strcpy(devname, "bnep%d");
++	if (ns->id == BNEP_SVC_PANU)
++		strncpy(devname, ns->netif, sizeof(devname) - 1);
++	else
++		strcpy(devname, "bnep%d");
+ 
+ 	nsk = g_io_channel_unix_get_fd(session->io);
+ 	err = bnep_connadd(nsk, dst_role, devname);
+@@ -279,13 +285,16 @@
+ 
+ 	info("Added new connection: %s", devname);
+ 
+-	if (bnep_add_to_bridge(devname, ns->bridge) < 0) {
+-		error("Can't add %s to the bridge %s: %s(%d)",
+-				devname, ns->bridge, strerror(errno), errno);
+-		return -EPERM;
+-	}
++	if (ns->id != BNEP_SVC_PANU) {
++		if (bnep_add_to_bridge(devname, ns->netif) < 0) {
++			error("Can't add %s to the bridge %s: %s(%d)",
++					devname, ns->netif, strerror(errno), errno);
++			return -EPERM;
++		}
+ 
+-	bnep_if_up(devname);
++		bnep_if_up(devname, 0);
++	} else
++		bnep_if_up(devname, ns->id);
+ 
+ 	strncpy(session->dev, devname, sizeof(devname));
+ 
+@@ -452,8 +461,12 @@
+ 		goto reply;
+ 	}
+ 
+-	if (!ns->bridge) {
+-		error("Bridge interface not configured");
++	if (!ns->netif) {
++	       	if (dst_role == BNEP_SVC_PANU)
++			error("Interface prefix not configured");
++		else
++			error("Bridge interface not configured");
++
+ 		goto reply;
+ 	}
+ 
+@@ -514,7 +527,6 @@
+ static void confirm_event(GIOChannel *chan, gpointer user_data)
+ {
+ 	struct network_adapter *na = user_data;
+-	struct network_server *ns;
+ 	int perr;
+ 	bdaddr_t src, dst;
+ 	char address[18];
+@@ -538,16 +550,6 @@
+ 		goto drop;
+ 	}
+ 
+-	ns = find_server(na->servers, BNEP_SVC_NAP);
+-	if (!ns)
+-		goto drop;
+-
+-	if (!ns->record_id)
+-		goto drop;
+-
+-	if (!ns->bridge)
+-		goto drop;
+-
+ 	na->setup = g_new0(struct network_session, 1);
+ 	bacpy(&na->setup->dst, &dst);
+ 	na->setup->io = g_io_channel_ref(chan);
+@@ -612,7 +614,9 @@
+ 		if (*session->dev == '\0')
+ 			continue;
+ 
+-		bnep_del_from_bridge(session->dev, ns->bridge);
++		if (ns->id != BNEP_SVC_PANU)
++			bnep_del_from_bridge(session->dev, ns->netif);
++
+ 		bnep_if_down(session->dev);
+ 
+ 		bnep_kill_connection(&session->dst);
+@@ -626,37 +630,62 @@
+ static void server_disconnect(DBusConnection *conn, void *user_data)
+ {
+ 	struct network_server *ns = user_data;
++	gboolean registered = FALSE;
++	const char *uuid;
++
++	DBG();
+ 
+ 	server_remove_sessions(ns);
+ 
+ 	ns->watch_id = 0;
+ 
+ 	if (ns->record_id) {
++		uuid = bnep_name(ns->id);
++		if (uuid == NULL)
++			uuid = "";
++
+ 		remove_record_from_server(ns->record_id);
+ 		ns->record_id = 0;
++
++		emit_property_changed(conn, adapter_get_path(ns->na->adapter),
++				ns->iface, "Registered",
++				DBUS_TYPE_BOOLEAN, &registered);
++		emit_property_changed(conn, adapter_get_path(ns->na->adapter),
++			       	ns->iface, "Interface",
++				DBUS_TYPE_STRING, &ns->netif);
++		emit_property_changed(conn, adapter_get_path(ns->na->adapter),
++				ns->iface, "UUID",
++				DBUS_TYPE_BOOLEAN, &uuid);
+ 	}
+ 
+-	g_free(ns->bridge);
+-	ns->bridge = NULL;
++	g_free(ns->netif);
++	ns->netif = NULL;
+ }
+ 
+ static DBusMessage *register_server(DBusConnection *conn,
+-				DBusMessage *msg, void *data)
++				DBusMessage *msg, void *data,
++				gboolean permanent)
+ {
+ 	struct network_server *ns = data;
+ 	DBusMessage *reply;
+-	const char *uuid, *bridge;
++	const char *uuid, *netif;
++	gboolean not_panu, registered = TRUE;
+ 
+ 	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &uuid,
+-				DBUS_TYPE_STRING, &bridge, DBUS_TYPE_INVALID))
++				DBUS_TYPE_STRING, &netif, DBUS_TYPE_INVALID))
+ 		return NULL;
+ 
+-	if (g_strcmp0(uuid, "nap"))
++	not_panu = g_strcmp0(uuid, "panu") != 0;
++
++	if (g_strcmp0(uuid, "nap") && g_strcmp0(uuid, "gn") && not_panu)
+ 		return btd_error_failed(msg, "Invalid UUID");
+ 
+ 	if (ns->record_id)
+ 		return btd_error_already_exists(msg);
+ 
++	if (not_panu && bridge_not_supported())
++		return btd_error_failed(msg, "Not supported bridge device");
++
+ 	reply = dbus_message_new_method_return(msg);
+ 	if (!reply)
+ 		return NULL;
+@@ -665,16 +694,39 @@
+ 	if (!ns->record_id)
+ 		return btd_error_failed(msg, "SDP record registration failed");
+ 
+-	g_free(ns->bridge);
+-	ns->bridge = g_strdup(bridge);
++	g_free(ns->netif);
++	ns->netif = g_strdup(netif);
++
++	emit_property_changed(conn, adapter_get_path(ns->na->adapter),
++				ns->iface, "Registered",
++				DBUS_TYPE_BOOLEAN, &registered);
++	emit_property_changed(conn, adapter_get_path(ns->na->adapter),
++		       		ns->iface, "Interface",
++				DBUS_TYPE_STRING, &ns->netif);
++	emit_property_changed(conn, adapter_get_path(ns->na->adapter),
++				ns->iface, "UUID",
++				DBUS_TYPE_BOOLEAN, &uuid);
+ 
+-	ns->watch_id = g_dbus_add_disconnect_watch(conn,
++	if (!permanent)
++		ns->watch_id = g_dbus_add_disconnect_watch(conn,
+ 					dbus_message_get_sender(msg),
+ 					server_disconnect, ns, NULL);
+ 
+ 	return reply;
+ }
+ 
++static DBusMessage *register_server_connected(DBusConnection *conn,
++					DBusMessage *msg, void *data)
++{
++	return register_server(conn, msg, data, FALSE);
++}
++
++static DBusMessage *register_server_permanent(DBusConnection *conn,
++					DBusMessage *msg, void *data)
++{
++	return register_server(conn, msg, data, TRUE);
++}
++
+ static DBusMessage *unregister_server(DBusConnection *conn,
+ 					DBusMessage *msg, void *data)
+ {
+@@ -682,11 +734,14 @@
+ 	DBusMessage *reply;
+ 	const char *uuid;
+ 
++	DBG();
++
+ 	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &uuid,
+ 							DBUS_TYPE_INVALID))
+ 		return NULL;
+ 
+-	if (g_strcmp0(uuid, "nap"))
++	if (g_strcmp0(uuid, "nap") && g_strcmp0(uuid, "gn") &&
++			g_strcmp0(uuid, "panu")) 
+ 		return btd_error_failed(msg, "Invalid UUID");
+ 
+ 	reply = dbus_message_new_method_return(msg);
+@@ -700,6 +755,46 @@
+ 	return reply;
+ }
+ 
++static DBusMessage *server_get_properties(DBusConnection *conn,
++					DBusMessage *msg, void *data)
++{
++	struct network_server *ns = data;
++	DBusMessage *reply;
++	DBusMessageIter iter;
++	DBusMessageIter dict;
++	dbus_bool_t registered;
++	const char *property;
++
++	reply = dbus_message_new_method_return(msg);
++	if (!reply)
++		return NULL;
++
++	dbus_message_iter_init_append(reply, &iter);
++
++	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY,
++			DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING
++			DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_VARIANT_AS_STRING
++			DBUS_DICT_ENTRY_END_CHAR_AS_STRING, &dict);
++
++	/* Registered */
++	registered = ns->record_id != 0;
++	dict_append_entry(&dict, "Registered", DBUS_TYPE_BOOLEAN, &registered);
++
++	/* Interface */
++	property = ns->netif ? ns->netif : "";
++	dict_append_entry(&dict, "Interface", DBUS_TYPE_STRING, &property);
++
++	/* UUID */
++	property = bnep_name(ns->id);
++	if (property == NULL)
++		property = "";
++	dict_append_entry(&dict, "UUID", DBUS_TYPE_STRING, &property);
++
++	dbus_message_iter_close_container(&iter, &dict);
++
++	return reply;
++}
++
+ static void adapter_free(struct network_adapter *na)
+ {
+ 	if (na->io != NULL) {
+@@ -717,6 +812,8 @@
+ 	if (!ns)
+ 		return;
+ 
++	DBG();
++
+ 	server_remove_sessions(ns);
+ 
+ 	if (ns->record_id)
+@@ -724,7 +821,7 @@
+ 
+ 	g_free(ns->iface);
+ 	g_free(ns->name);
+-	g_free(ns->bridge);
++	g_free(ns->netif);
+ 
+ 	g_free(ns);
+ }
+@@ -748,11 +845,18 @@
+ }
+ 
+ static GDBusMethodTable server_methods[] = {
+-	{ "Register",	"ss",	"",	register_server		},
+-	{ "Unregister",	"s",	"",	unregister_server	},
++	{ "Register",		"ss",	"",	register_server_connected },
++	{ "RegisterPermanent",	"ss",	"",	register_server_permanent },
++	{ "Unregister",		"s",	"",	unregister_server },
++	{ "GetProperties",	"",	"a{sv}",server_get_properties },
+ 	{ }
+ };
+ 
++static GDBusSignalTable server_signals[] = {
++	{ "PropertyChanged",	"sv"	},
++	{}
++};
++
+ static struct network_adapter *create_adapter(struct btd_adapter *adapter)
+ {
+ 	struct network_adapter *na;
+@@ -783,7 +887,8 @@
+ 	return na;
+ }
+ 
+-int server_register(struct btd_adapter *adapter, uint16_t id)
++int server_register(struct btd_adapter *adapter, uint16_t id, gboolean enable,
++			const char *netif)
+ {
+ 	struct network_adapter *na;
+ 	struct network_server *ns;
+@@ -803,14 +908,26 @@
+ 
+ 	ns = g_new0(struct network_server, 1);
+ 
+-	ns->iface = g_strdup(NETWORK_SERVER_INTERFACE);
+-	ns->name = g_strdup("Network service");
++	switch (id) {
++	case BNEP_SVC_PANU:
++		ns->iface = g_strdup(NETWORK_PEER_INTERFACE);
++		ns->name = g_strdup("Network Peer service");
++		break;
++	case BNEP_SVC_GN:
++		ns->iface = g_strdup(NETWORK_HUB_INTERFACE);
++		ns->name = g_strdup("Network GN service");
++		break;
++	case BNEP_SVC_NAP:
++		ns->iface = g_strdup(NETWORK_ROUTER_INTERFACE);
++		ns->name = g_strdup("Network NAP service");
++	}
+ 
+ 	path = adapter_get_path(adapter);
+ 
+-	if (!g_dbus_register_interface(connection, path, ns->iface,
+-					server_methods, NULL, NULL,
+-					ns, path_unregister)) {
++	if (g_dbus_register_interface(connection, path, ns->iface,
++					server_methods, 
++					server_signals, NULL,
++					ns, path_unregister) == FALSE) {
+ 		error("D-Bus failed to register %s interface",
+ 				ns->iface);
+ 		server_free(ns);
+@@ -820,7 +937,11 @@
+ 	adapter_get_address(adapter, &ns->src);
+ 	ns->id = id;
+ 	ns->na = na;
+-	ns->record_id = 0;
++	if (enable) {
++		ns->record_id = register_server_record(ns);
++		ns->netif = g_strdup(netif);
++	} else
++		ns->record_id = 0;
+ 	na->servers = g_slist_append(na->servers, ns);
+ 
+ 	DBG("Registered interface %s on path %s", ns->iface, path);
+diff -ur bluez-4.99.pan.orig/network/server.h bluez-4.99.pan/network/server.h
+--- bluez-4.99.pan.orig/network/server.h	2012-10-29 07:46:02.759390667 -0400
++++ bluez-4.99.pan/network/server.h	2012-11-10 21:07:50.823497447 -0500
+@@ -23,7 +23,8 @@
+ 
+ int server_init(DBusConnection *conn, gboolean secure);
+ void server_exit(void);
+-int server_register(struct btd_adapter *adapter, uint16_t id);
++int server_register(struct btd_adapter *adapter, uint16_t id, gboolean enable,
++				                        const char *bridge);
+ int server_unregister(struct btd_adapter *adapter, uint16_t id);
+ 
+ int server_find_data(const char *path, const char *pattern);
