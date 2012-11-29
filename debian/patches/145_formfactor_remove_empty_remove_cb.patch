@@ -1,0 +1,27 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	ccab1d7ba2b11dc8ec1369e1e54d0a0968441b37
+	Mon, 26 Nov 2012 12:55:58 +0000 (14:55 +0200)
+
+formfactor: Remove not needed empty remove callback
+
+Remove callback is called only if it is not NULL so there is no need to
+register empty callback function.
+
+diff -ur bluez-4.99.fix.orig/plugins/formfactor.c bluez-4.99.fix/plugins/formfactor.c
+--- bluez-4.99.fix.orig/plugins/formfactor.c	2011-12-21 17:53:54.000000000 -0500
++++ bluez-4.99.fix/plugins/formfactor.c	2012-11-29 09:00:25.440198456 -0500
+@@ -124,14 +124,9 @@
+ 	return 0;
+ }
+ 
+-static void formfactor_remove(struct btd_adapter *adapter)
+-{
+-}
+-
+ static struct btd_adapter_driver formfactor_driver = {
+ 	.name	= "formfactor",
+ 	.probe	= formfactor_probe,
+-	.remove	= formfactor_remove,
+ };
+ 
+ static int formfactor_init(void)
