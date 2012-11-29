@@ -1,0 +1,26 @@
+author	Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+commit	0429e416f1741f7c9448b20daec71e108ec686a1
+	Tue, 20 Nov 2012 09:20:58 +0000 (11:20 +0200)
+
+audio: Auto connect AVRCP in case of A2DP source is connected
+
+This enables the same logic used for A2DP sink, so it attempt to
+connect AVRCP if remote device support it.
+
+Note this is necessary for some devices e.g. WP7 that don't connect
+even when being the initiator because it is not mandatory for target
+to do so even though it is recommended to avoid collisions while trying
+to estabilish the connection.
+
+diff -ur bluez-4.99.fix.orig/audio/device.c bluez-4.99.fix/audio/device.c
+--- bluez-4.99.fix.orig/audio/device.c	2012-10-17 15:15:25.302182000 -0400
++++ bluez-4.99.fix/audio/device.c	2012-11-29 08:29:44.528238720 -0500
+@@ -369,7 +369,7 @@
+ 				avdtp_session_state_t new_state,
+ 				void *user_data)
+ {
+-	if (!dev->sink || !dev->control)
++	if (!dev->control)
+ 		return;
+ 
+ 	if (new_state == AVDTP_SESSION_STATE_CONNECTED) {
