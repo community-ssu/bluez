@@ -1,0 +1,23 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	eaef3c779163e3fa75f4ab8b383b0ecaadfe45a0
+	Wed, 21 Nov 2012 10:35:08 +0000 (12:35 +0200)
+
+gdbus: Remove not needed NULL pointer checks
+
+g_strdup returns NULL if argument passed is NULL and there is no need
+to double check that.
+
+diff -ur bluez-4.99.fix.orig/gdbus/watch.c bluez-4.99.fix/gdbus/watch.c
+--- bluez-4.99.fix.orig/gdbus/watch.c	2012-10-17 15:15:25.746180000 -0400
++++ bluez-4.99.fix/gdbus/watch.c	2012-11-29 08:52:14.532248446 -0500
+@@ -229,8 +229,8 @@
+ 	data = g_new0(struct filter_data, 1);
+ 
+ 	data->connection = dbus_connection_ref(connection);
+-	data->name = name ? g_strdup(name) : NULL;
+-	data->owner = owner ? g_strdup(owner) : NULL;
++	data->name = g_strdup(name);
++	data->owner = g_strdup(owner);
+ 	data->path = g_strdup(path);
+ 	data->interface = g_strdup(interface);
+ 	data->member = g_strdup(member);
