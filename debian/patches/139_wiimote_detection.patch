@@ -1,0 +1,69 @@
+author	David Herrmann <dh.herrmann@googlemail.com>
+commit	e9fc6bf4a3ffad3a40096836aff7858a57ce0288
+	Wed, 28 Nov 2012 12:51:32 +0000 (14:51 +0200)
+
+wiimote: add Wii-Remote-Plus ID and name detection
+
+The Nintendo Wii Remote Plus uses a new product ID and name. To detect
+them properly, we need to add them to the wiimote-module.
+
+To avoid an overlong "if" statement, this converts the match-function to
+walk over an array and check all VID/PID pairs and device-names. This
+makes adding new devices much easier.
+
+diff -ur bluez-4.99.fix.orig/plugins/wiimote.c bluez-4.99.fix/plugins/wiimote.c
+--- bluez-4.99.fix.orig/plugins/wiimote.c	2012-10-17 15:15:24.746179000 -0400
++++ bluez-4.99.fix/plugins/wiimote.c	2012-11-29 07:19:11.240236102 -0500
+@@ -56,12 +56,24 @@
+  * is pressed.
+  */
+ 
++static uint16_t wii_ids[][2] = {
++	{ 0x057e, 0x0306 },
++	{ 0x057e, 0x0330 },
++};
++
++static const char *wii_names[] = {
++	"Nintendo RVL-CNT-01",
++	"Nintendo RVL-CNT-01-TR",
++	"Nintendo RVL-WBC-01",
++};
++
+ static ssize_t wii_pincb(struct btd_adapter *adapter, struct btd_device *device,
+ 								char *pinbuf)
+ {
+ 	uint16_t vendor, product;
+ 	bdaddr_t sba, dba;
+ 	char addr[18], name[25];
++	unsigned int i;
+ 
+ 	adapter_get_address(adapter, &sba);
+ 	device_get_address(device, &dba, NULL);
+@@ -74,14 +86,22 @@
+ 	device_get_name(device, name, sizeof(name));
+ 	name[sizeof(name) - 1] = 0;
+ 
+-	if (g_str_equal(name, "Nintendo RVL-CNT-01") ||
+-				(vendor == 0x057e && product == 0x0306)) {
+-		DBG("Forcing fixed pin on detected wiimote %s", addr);
+-		memcpy(pinbuf, &sba, 6);
+-		return 6;
++	for (i = 0; i < G_N_ELEMENTS(wii_ids); ++i) {
++		if (vendor == wii_ids[i][0] && product == wii_ids[i][1])
++			goto found;
++	}
++
++	for (i = 0; i < G_N_ELEMENTS(wii_names); ++i) {
++		if (g_str_equal(name, wii_names[i]))
++			goto found;
+ 	}
+ 
+ 	return 0;
++
++found:
++	DBG("Forcing fixed pin on detected wiimote %s", addr);
++	memcpy(pinbuf, adapter_get_address(adapter), 6);
++	return 6;
+ }
+ 
+ static int wii_probe(struct btd_adapter *adapter)
