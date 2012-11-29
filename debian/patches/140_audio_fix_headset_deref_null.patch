@@ -1,0 +1,27 @@
+author	Syam Sidhardhan <s.syam@samsung.com>
+mail	1351000626-22632-1-git-send-email-s.syam@samsung.com
+	Tue, 23 Oct 2012 19:27:05 +0530
+
+audio: Fix headset NULL pointer dereference during AT+BLDN response
+
+While waiting for the AT+BLDN asynchronous response, if RFCOMM got
+disconnected, then respose will cause NULL pointer dereference.
+
+During headset disconnection, the headset state changes from
+HEADSET_STATE_CONNECTED to HEADSET_STATE_DISCONNECTED along with
+freeing the dev->headset. During the response, in telephony_generic_rsp
+its dereferencing.
+
+diff -ur bluez-4.99.fix.orig/audio/headset.c bluez-4.99.fix/audio/headset.c
+--- bluez-4.99.fix.orig/audio/headset.c	2012-10-17 15:15:25.278173000 -0400
++++ bluez-4.99.fix/audio/headset.c	2012-11-29 07:43:03.092236803 -0500
+@@ -690,6 +690,9 @@
+ 	struct headset *hs = device->headset;
+ 	struct headset_slc *slc = hs->slc;
+ 
++	if (!slc)
++		return -EIO;
++
+ 	if ((err != CME_ERROR_NONE) && slc->cme_enabled)
+ 		return headset_send(hs, "\r\n+CME ERROR: %d\r\n", err);
+ 
