@@ -1,0 +1,159 @@
+This patchset includes minor refactoring and a bug fix. The bug
+is exposed when a data sequence grows beyond 256 bytes, in this case the
+complete sequence data is written, but the size is truncated to one
+byte, resulting in a corrupted SDP response.
+
+RE: Feedback on potential fix for issue while advertising Feature List
+
+author	Bart Westgeest <bart@elbrys.com>
+commit	74116be7b84cbd422fcc765c9ef5d1f65287a0db
+	Tue, 20 Nov 2012 12:51:16 +0000 (14:51 +0200)
+
+sdp: Inlined single use of function sdp_set_data_type
+
+Inlining single use of sdp_set_data_type to improve code readability,
+since the function was doing more than just setting the data type.
+
+author	Bart Westgeest <bart@elbrys.com>
+commit	06c25421af1fddb3e978d309c7df86019f293fba
+	Tue, 20 Nov 2012 12:52:34 +0000 (14:52 +0200)
+
+sdp: Limit side effects of sdp_get_data_type and sdp_get_data_size
+
+Remove modification of buf->buf_size in 'get' functions. Data is
+still indirectly modified due to recursive nature of code.
+
+Renamed sdp_get_data_type to sdp_get_data_type_size.
+
+author	Bart Westgeest <bart@elbrys.com>
+commit	f8b977a7760937eeeca427b5b251ce2ee1cd55e9
+	Tue, 20 Nov 2012 12:53:21 +0000 (14:53 +0200)
+
+sdp: Upgrade datatype SEQ8 to SEQ16 when data size is greater than 256
+
+Fixes a bug where the complete sequence data is written, but the size
+is truncated to one byte.
+
+diff -ur bluez-4.99.fix.orig/lib/sdp.c bluez-4.99.fix/lib/sdp.c
+--- bluez-4.99.fix.orig/lib/sdp.c	2012-10-17 15:15:25.982174000 -0400
++++ bluez-4.99.fix/lib/sdp.c	2012-11-29 08:24:53.768223477 -0500
+@@ -635,49 +635,32 @@
+ 	}
+ }
+ 
+-static int sdp_get_data_type(sdp_buf_t *buf, uint8_t dtd)
++static int sdp_get_data_type_size(uint8_t dtd)
+ {
+-	int data_type = 0;
+-
+-	data_type += sizeof(uint8_t);
++	int size = sizeof(uint8_t);
+ 
+ 	switch (dtd) {
+ 	case SDP_SEQ8:
+ 	case SDP_TEXT_STR8:
+ 	case SDP_URL_STR8:
+ 	case SDP_ALT8:
+-		data_type += sizeof(uint8_t);
++		size += sizeof(uint8_t);
+ 		break;
+ 	case SDP_SEQ16:
+ 	case SDP_TEXT_STR16:
+ 	case SDP_URL_STR16:
+ 	case SDP_ALT16:
+-		data_type += sizeof(uint16_t);
++		size += sizeof(uint16_t);
+ 		break;
+ 	case SDP_SEQ32:
+ 	case SDP_TEXT_STR32:
+ 	case SDP_URL_STR32:
+ 	case SDP_ALT32:
+-		data_type += sizeof(uint32_t);
++		size += sizeof(uint32_t);
+ 		break;
+ 	}
+ 
+-	if (!buf->data)
+-		buf->buf_size += data_type;
+-
+-	return data_type;
+-}
+-
+-static int sdp_set_data_type(sdp_buf_t *buf, uint8_t dtd)
+-{
+-	int data_type = 0;
+-	uint8_t *p = buf->data + buf->data_size;
+-
+-	*p = dtd;
+-	data_type = sdp_get_data_type(buf, dtd);
+-	buf->data_size += data_type;
+-
+-	return data_type;
++	return size;
+ }
+ 
+ void sdp_set_attrid(sdp_buf_t *buf, uint16_t attr)
+@@ -776,9 +759,6 @@
+ 		break;
+ 	}
+ 
+-	if (!buf->data)
+-		buf->buf_size += data_size;
+-
+ 	return data_size;
+ }
+ 
+@@ -797,8 +777,8 @@
+ 	/* attribute length */
+ 	buf->buf_size += sizeof(uint8_t) + sizeof(uint16_t);
+ 
+-	sdp_get_data_type(buf, d->dtd);
+-	sdp_get_data_size(buf, d);
++	buf->buf_size +=sdp_get_data_type_size(d->dtd);
++	buf->buf_size += sdp_get_data_size(buf, d);
+ 
+ 	if (buf->buf_size > UCHAR_MAX && d->dtd == SDP_SEQ8)
+ 		buf->buf_size += sizeof(uint8_t);
+@@ -808,19 +788,29 @@
+ 
+ int sdp_gen_pdu(sdp_buf_t *buf, sdp_data_t *d)
+ {
+-	uint32_t pdu_size = 0, data_size = 0;
++	uint32_t pdu_size, data_size;
+ 	unsigned char *src = NULL, is_seq = 0, is_alt = 0;
+-	uint8_t dtd = d->dtd;
+ 	uint16_t u16;
+ 	uint32_t u32;
+ 	uint64_t u64;
+ 	uint128_t u128;
+ 	uint8_t *seqp = buf->data + buf->data_size;
++	uint32_t orig_data_size = buf->data_size;
++
++recalculate:
++	pdu_size = sdp_get_data_type_size(d->dtd);
++	buf->data_size += pdu_size;
+ 
+-	pdu_size = sdp_set_data_type(buf, dtd);
+ 	data_size = sdp_get_data_size(buf, d);
++	if (data_size > UCHAR_MAX && d->dtd == SDP_SEQ8) {
++		buf->data_size = orig_data_size;
++		d->dtd = SDP_SEQ16;
++		goto recalculate;
++	}
+ 
+-	switch (dtd) {
++	*seqp = d->dtd;
++
++	switch (d->dtd) {
+ 	case SDP_DATA_NIL:
+ 		break;
+ 	case SDP_UINT8:
+@@ -902,7 +892,7 @@
+ 		if (src && buf->buf_size >= buf->data_size + data_size) {
+ 			memcpy(buf->data + buf->data_size, src, data_size);
+ 			buf->data_size += data_size;
+-		} else if (dtd != SDP_DATA_NIL) {
++		} else if (d->dtd != SDP_DATA_NIL) {
+ 			SDPDBG("Gen PDU : Can't copy from invalid source or dest\n");
+ 		}
+ 	}
