@@ -1,0 +1,70 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	9d91d1e767599b5ad9afacf9607f93a1cabdca68
+	Mon, 3 Dec 2012 11:02:47 +0000 (13:02 +0200)
+
+rfkill: Fix memory leak in rfkill_exit
+
+g_io_add_watch increase channel ref count but g_io_channel_shutdown
+doesn't drop reference nor remove watch. Since close on unref is set
+for channel and it is watch we are interested keep watch id and not
+channel id and remove watch on exit.
+
+120 bytes in 1 blocks are still reachable in loss record 181 of 235
+    at 0x4C2B6CD: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+    by 0x4E7FA78: g_malloc (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+    by 0x4EB66F4: g_io_channel_unix_new (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+    by 0x167B8D: rfkill_init (rfkill.c:157)
+    by 0x1215E4: main (main.c:540)
+
+6 bytes in 1 blocks are still reachable in loss record 12 of 235
+   at 0x4C2B6CD: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+   by 0x4E7FA78: g_malloc (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E942DD: g_strdup (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E6CF95: g_io_channel_init (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4EB66FF: g_io_channel_unix_new (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x167B8D: rfkill_init (rfkill.c:157)
+   by 0x1215E4: main (main.c:540)
+
+diff -ur bluez-4.99.fix.orig/src/rfkill.c bluez-4.99.fix/src/rfkill.c
+--- bluez-4.99.fix.orig/src/rfkill.c	2011-01-20 02:49:26.000000000 -0500
++++ bluez-4.99.fix/src/rfkill.c	2012-12-10 11:53:51.064261968 -0500
+@@ -139,11 +139,12 @@
+ 	return TRUE;
+ }
+ 
+-static GIOChannel *channel = NULL;
++static guint watch = 0;
+ 
+ void rfkill_init(void)
+ {
+ 	int fd;
++	GIOChannel *channel = NULL;
+ 
+ 	if (!main_opts.remember_powered)
+ 		return;
+@@ -157,17 +158,18 @@
+ 	channel = g_io_channel_unix_new(fd);
+ 	g_io_channel_set_close_on_unref(channel, TRUE);
+ 
+-	g_io_add_watch(channel, G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
+-							rfkill_event, NULL);
++	watch = g_io_add_watch(channel,
++				G_IO_IN | G_IO_NVAL | G_IO_HUP | G_IO_ERR,
++				rfkill_event, NULL);
++
++	g_io_channel_unref(channel);
+ }
+ 
+ void rfkill_exit(void)
+ {
+-	if (!channel)
++	if (watch == 0)
+ 		return;
+ 
+-	g_io_channel_shutdown(channel, TRUE, NULL);
+-	g_io_channel_unref(channel);
+-
+-	channel = NULL;
++	g_source_remove(watch);
++	watch = 0;
+ }
