@@ -1,0 +1,62 @@
+author	Szymon Janc <szymon.janc@tieto.com>
+commit	72c491eb405a47d7380a8cb12a78db92927ff9d2
+	Mon, 3 Dec 2012 11:04:14 +0000 (13:04 +0200)
+
+core: Free parsed options
+
+There is no need to keep already parsed options in memory. This also
+fix not freeing options at all.
+
+2 bytes in 1 blocks are still reachable in loss record 1 of 153
+   at 0x4C2B6CD: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+   by 0x4E7FA78: g_malloc (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E942DD: g_strdup (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x167333: parse_debug (main.c:425)
+   by 0x4E839D8: ??? (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E8403F: ??? (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E85233: g_option_context_parse (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x121084: main (main.c:462)
+
+16 bytes in 2 blocks are still reachable in loss record 39 of 153
+   at 0x4C2B6CD: malloc (in /usr/lib/valgrind/vgpreload_memcheck-amd64-linux.so)
+   by 0x4E7FA78: g_malloc (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E5D68B: g_convert_with_iconv (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E5D94B: g_convert (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E5DFBA: g_locale_to_utf8 (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E837C7: ??? (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E8403F: ??? (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x4E85233: g_option_context_parse (in /lib/x86_64-linux-gnu/libglib-2.0.so.0.3200.3)
+   by 0x121084: main (main.c:462)
+
+diff -ur bluez-4.99.fix.orig/src/main.c bluez-4.99.fix/src/main.c
+--- bluez-4.99.fix.orig/src/main.c	2012-10-17 15:15:25.906178000 -0400
++++ bluez-4.99.fix/src/main.c	2012-12-10 12:36:04.812250735 -0500
+@@ -352,6 +352,18 @@
+ static gboolean option_version = FALSE;
+ static gboolean option_udev = FALSE;
+ 
++static void free_options(void)
++{
++	g_free(option_debug);
++	option_debug = NULL;
++
++	g_free(option_plugin);
++	option_plugin = NULL;
++
++	g_free(option_noplugin);
++	option_noplugin = NULL;
++}
++
+ static guint last_adapter_timeout = 0;
+ 
+ static gboolean exit_timeout(gpointer data)
+@@ -549,6 +561,9 @@
+ 	 * daemon needs to be re-worked. */
+ 	plugin_init(config, option_plugin, option_noplugin);
+ 
++	/* no need to keep parsed option in memory */
++	free_options();
++
+ 	if (adapter_ops_setup() < 0) {
+ 		error("adapter_ops_setup failed");
+ 		exit(1);
