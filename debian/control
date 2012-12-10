@@ -10,9 +10,9 @@ Package: bluez
 Architecture: any
 Depends: ${shlibs:Depends}, dbus
 Recommends: dsme, osso-product-info
-Provides: bluez-utils
-Replaces: bluez-utils
-Conflicts: bluez-utils
+Provides: bluez-utils, bluetooth-dun
+Replaces: bluez-utils, bluetooth-dun
+Conflicts: bluez-utils, bluetooth-dun
 Description: Bluetooth tools and daemons
  This package contains tools and system daemons for using Bluetooth devices.
  .
