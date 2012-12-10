@@ -1,0 +1,57 @@
+author	Paulo Borges <paulo.borges@openbossa.org>
+commit	d07b73511740d59e0fba68cc87ad9bc61ca283ad
+	Sat, 1 Dec 2012 09:11:16 +0000 (11:11 +0200)
+
+gatt: Fix memory leak in characteristic discovery
+
+If the Discover Characteristics by UUID sub-procedure has been
+executed and the first characteristic is not the target, a memory
+leak occurs.
+
+This commit fixes this leak by postponing the allocation to after
+the UUID verification.
+
+author	Paulo Borges <paulo.borges@openbossa.org>
+commit	a5c67459d87a95209fd9b58e00ef91456b574d1a
+	Sat, 1 Dec 2012 09:11:26 +0000 (11:11 +0200)
+
+gatt: Improve characteristics discovery
+
+In the Discover Characteristics by UUID sub-procedure, if a fetched
+characteristic doesn't matches with the target UUID, all others
+characteristics in that response were discarded.
+
+Because of this, the procedure will make a new request to possibly
+rediscover the characteristics in the range beyond this last
+characteristic.
+
+At present, this procedure works because the gatt library will send a
+Read by Type Request starting at the first attribute after the non
+matching characteristic.
+
+This commit makes the rest of the characteristics to be checked for a
+matching type, which should reduce the number of requests sent during
+the discovery of characteristics.
+
+diff -ur bluez-4.99.fix.orig/attrib/gatt.c bluez-4.99.fix/attrib/gatt.c
+--- bluez-4.99.fix.orig/attrib/gatt.c	2012-12-10 13:08:37.820229000 -0500
++++ bluez-4.99.fix/attrib/gatt.c	2012-12-10 13:09:37.144235549 -0500
+@@ -285,15 +285,15 @@
+ 		} else
+ 			uuid = att_get_uuid128(&value[5]);
+ 
++		if (dc->uuid && bt_uuid_cmp(dc->uuid, &uuid))
++			continue;
++
+ 		chars = g_try_new0(struct att_char, 1);
+ 		if (!chars) {
+ 			err = ATT_ECODE_INSUFF_RESOURCES;
+ 			goto done;
+ 		}
+ 
+-		if (dc->uuid && bt_uuid_cmp(dc->uuid, &uuid))
+-			break;
+-
+ 		chars->handle = last;
+ 		chars->properties = value[2];
+ 		chars->value_handle = att_get_u16(&value[3]);
