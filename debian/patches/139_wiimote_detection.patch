@@ -62,7 +62,7 @@ diff -ur bluez-4.99.fix.orig/plugins/wiimote.c bluez-4.99.fix/plugins/wiimote.c
 +
 +found:
 +	DBG("Forcing fixed pin on detected wiimote %s", addr);
-+	memcpy(pinbuf, adapter_get_address(adapter), 6);
++	adapter_get_address(adapter, pinbuf);
 +	return 6;
  }
  
