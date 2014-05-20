@@ -1,0 +1,26 @@
+From 4433bad33a5e949208a0b02acd6a2cf6da47ec3e Mon Sep 17 00:00:00 2001
+From: Syam Sidhardhan <s.syam@samsung.com>
+Date: Mon, 18 Feb 2013 21:34:43 +0530
+Subject: [PATCH] avctp: Fix invalid file descriptor close
+
+During avctp_confirm_cb(), if any error happens we set the session
+state to AVCTP_STATE_DISCONNECTED, which inturn try to close fd 0.
+---
+ audio/avctp.c |    1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/audio/avctp.c b/audio/avctp.c
+index 5bd5db1..0f425ca 100644
+--- a/audio/avctp.c
++++ b/audio/avctp.c
+@@ -680,6 +680,7 @@ static struct avctp *avctp_get_internal(const bdaddr_t *src,
+ 	session->server = server;
+ 	bacpy(&session->dst, dst);
+ 	session->state = AVCTP_STATE_DISCONNECTED;
++	session->uinput = -1;
+ 
+ 	server->sessions = g_slist_append(server->sessions, session);
+ 
+-- 
+1.7.9.5
+
