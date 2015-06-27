@@ -1,5 +1,11 @@
 bluez (4.99-2maemo1+0cssu1) unstable; urgency=low
 
+  [ Pali Rohár ]
+  * Add patch 151-avctp-Fix-invalid-file-descriptor-close.patch
+  * Fix compilation of patch 139_wiimote_detection.patch
+  * Do not install l2test, gaptest and rctest binaries which are not built anymore
+
+  [ Ludek Finstrle ]
   * Add patch 601_lower_sink_ranking.patch
   * Fix return code of hid2hci: add patch 603-Fix-return-code-of-hid2hci.patch
   * Fix FTBFS with -std=c99 option: add patches/609_fix_ftbfs_with_c99.patch
@@ -329,7 +335,7 @@ bluez (4.99-2maemo1+0cssu1) unstable; urgency=low
         Add support for caching of remote host features.
         Add preliminary voice dialing support for HSP.
 
- -- Ludek Finstrle <luf@pzkagis.cz>  Sun,  7 Oct 2012 18:44:29 +0200
+ -- Pali Rohár <pali.rohar@gmail.com>  Sat, 27 Jun 2015 13:12:38 +0200
 
 bluez (4.60-0maemo1.6+0m5) unstable; urgency=low
 
