@@ -1,3 +1,10 @@
+bluez (4.60-0maemo1.6+1m5) unstable; urgency=high
+
+  * CVE-2017-1000250: information disclosure vulnerability in
+    service_search_attr_req (Closes: #875633)
+
+ -- Ludek Finstrle <luf@seznam.cz>  Tue, 30 Jan 2018 19:05:42 +0100
+
 bluez (4.60-0maemo1.6+0m5) unstable; urgency=low
 
   * This entry has been added by BIFH queue processor
